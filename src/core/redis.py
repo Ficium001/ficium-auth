@@ -20,7 +20,7 @@ async def get_redis() -> aioredis.Redis:
     if _pool is None:
         _pool = aioredis.from_url(
             settings.redis_url,
-            password=settings.redis_password,
+            password=settings.redis_password or None,
             encoding="utf-8",
             decode_responses=True,
             max_connections=20,
