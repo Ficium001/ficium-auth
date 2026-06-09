@@ -184,6 +184,8 @@ async def _create_institution(body: RegisterRequest) -> uuid.UUID:
                 "Authorization": f"Bearer {settings.supabase_service_key}",
                 "Content-Type": "application/json",
                 "Prefer": "return=representation",
+                "Accept-Profile": "institution",
+                "Content-Profile": "institution",
             },
             json={
                 "name":                  body.institution_name,
