@@ -173,7 +173,7 @@ class AuthAuditEvent(Base):
     outcome:        Mapped[str]            = mapped_column(String(20), nullable=False)   # success | failed | blocked
     ip_address:     Mapped[Optional[str]]  = mapped_column(String(45), nullable=True)
     user_agent:     Mapped[Optional[str]]  = mapped_column(Text, nullable=True)
-    metadata:       Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    event_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at:     Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
 
     user: Mapped[Optional["AuthUser"]] = relationship(back_populates="audit_events")

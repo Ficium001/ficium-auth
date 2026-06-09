@@ -41,7 +41,7 @@ class AuditService:
                 outcome=outcome,
                 ip_address=ip_address,
                 user_agent=user_agent,
-                metadata=metadata,
+                event_metadata=metadata,
             )
             self.db.add(event)
             await self.db.flush()
