@@ -112,15 +112,18 @@ def issue_access_token(
     exp = now + settings.jwt_access_ttl
 
     payload: dict[str, Any] = {
-        "iss": settings.jwt_issuer,
-        "aud": settings.jwt_audience,
-        "sub": user_id,
-        "iat": now,
-        "exp": exp,
-        "jti": secrets.token_hex(16),
-        # Custom claims
+        # Supabase-required claims for auth.jwt() and RLS to work
+        "iss":  "supabase",
+        "ref":  settings.supabase_url.split("//")[-1].split(".")[0] if settings.supabase_url else "",
+        "role": "authenticated",   # required by Supabase RLS
+        "aud":  "authenticated",
+        "sub":  user_id,
+        "iat":  now,
+        "exp":  exp,
+        "jti":  secrets.token_hex(16),
+        # ficium custom claims
         "institution_id": institution_id,
-        "role":           role,
+        "user_role":      role,      # use user_role to avoid clash with Supabase 'role'
         "session_id":     session_id,
         "deployment":     deployment,
     }
@@ -138,8 +141,8 @@ def verify_access_token(token: str) -> dict[str, Any]:
         token,
         _jwt_verify_key(),
         algorithms=[_jwt_algorithm()],
-        audience=settings.jwt_audience,
-        issuer=settings.jwt_issuer,
+        audience="authenticated",
+        options={"verify_iss": False},  # iss varies between modes
     )
 
 
