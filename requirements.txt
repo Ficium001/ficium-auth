@@ -41,6 +41,6 @@ slowapi==0.1.9
 pytest==8.3.4
 pytest-asyncio==0.24.0
 
-# Enterprise SSO (Phase 2 — comment out if build fails)
+# Enterprise SSO (Phase 2 — requires libldap2-dev, uncomment when needed)
 # python3-saml==1.16.0
 # python-ldap==3.4.4

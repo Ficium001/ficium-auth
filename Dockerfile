@@ -8,13 +8,11 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# System deps for cryptography, argon2, ldap
+# System deps for cryptography and argon2
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
     libssl-dev \
-    libldap2-dev \
-    libsasl2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps into /install
@@ -30,8 +28,6 @@ RUN groupadd -r ficium && useradd -r -g ficium -s /sbin/nologin ficium
 
 # Runtime system deps only
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libldap-2.5-0 \
-    libsasl2-2 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
