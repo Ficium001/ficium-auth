@@ -72,7 +72,27 @@ def validate_password_policy(password: str) -> None:
         raise PasswordPolicyError("Password must contain at least one symbol.")
 
 
-# ── JWT (RS256 — asymmetric) ──────────────────────────────────
+# ── JWT signing ───────────────────────────────────────────────
+# Uses HS256 with Supabase JWT secret (free plan compatible).
+# Supabase trusts these tokens natively — no RS256 Pro plan needed.
+
+def _jwt_sign_key() -> str:
+    """Return the key to sign JWTs with."""
+    if settings.supabase_jwt_secret:
+        return settings.supabase_jwt_secret
+    return settings.jwt_private_key
+
+def _jwt_verify_key() -> str:
+    """Return the key to verify JWTs with."""
+    if settings.supabase_jwt_secret:
+        return settings.supabase_jwt_secret
+    return settings.jwt_public_key
+
+def _jwt_algorithm() -> str:
+    if settings.supabase_jwt_secret:
+        return "HS256"
+    return settings.jwt_algorithm
+
 
 def issue_access_token(
     user_id:        str,
@@ -83,7 +103,9 @@ def issue_access_token(
     extra_claims:   dict[str, Any] | None = None,
 ) -> tuple[str, int]:
     """
-    Issue a signed RS256 JWT access token.
+    Issue a signed JWT access token.
+    Uses HS256 with Supabase JWT secret when available (free plan).
+    Falls back to RS256 with RSA key pair (Pro plan / on-prem).
     Returns (token, expires_at_unix_timestamp).
     """
     now = int(time.time())
@@ -95,7 +117,7 @@ def issue_access_token(
         "sub": user_id,
         "iat": now,
         "exp": exp,
-        "jti": secrets.token_hex(16),       # unique token ID (prevent replay)
+        "jti": secrets.token_hex(16),
         # Custom claims
         "institution_id": institution_id,
         "role":           role,
@@ -106,23 +128,16 @@ def issue_access_token(
     if extra_claims:
         payload.update(extra_claims)
 
-    token = jwt.encode(
-        payload,
-        settings.jwt_private_key,
-        algorithm=settings.jwt_algorithm,
-    )
+    token = jwt.encode(payload, _jwt_sign_key(), algorithm=_jwt_algorithm())
     return token, exp
 
 
 def verify_access_token(token: str) -> dict[str, Any]:
-    """
-    Verify and decode a JWT access token.
-    Raises JWTError on invalid/expired token.
-    """
+    """Verify and decode a JWT access token."""
     return jwt.decode(
         token,
-        settings.jwt_public_key,
-        algorithms=[settings.jwt_algorithm],
+        _jwt_verify_key(),
+        algorithms=[_jwt_algorithm()],
         audience=settings.jwt_audience,
         issuer=settings.jwt_issuer,
     )

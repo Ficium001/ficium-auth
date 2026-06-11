@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     jwt_access_ttl:   int = 900        # 15 minutes
     jwt_refresh_ttl:  int = 28800      # 8 hours (bank working day)
     jwt_issuer:       str = "ficium-auth"
-    jwt_audience:     str = "ficium-portal"
+    jwt_audience:     str = "authenticated"   # Supabase expects 'authenticated' for RLS
 
     # ── Password policy ───────────────────────────────────────
     password_min_length:    int  = 12
@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     # ── Supabase (SaaS mode) ──────────────────────────────────
     supabase_url:         str = ""
     supabase_service_key: str = ""
+    supabase_jwt_secret:  str = ""   # HS256 secret from Supabase → Settings → API → JWT Secret
 
     # ── SAML (PaaS — Phase 2) ─────────────────────────────────
     auth_provider:        str = "email"      # email | saml | ldap
