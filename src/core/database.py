@@ -1,124 +1,246 @@
 # =============================================================
-# ficium-auth — Database (SQLAlchemy + psycopg2)
-# Uses psycopg2 driver which works reliably with Supabase
-# transaction pooler from Railway.
-# Async interface maintained via SQLAlchemy's thread pool.
+# ficium-auth — Database via Supabase REST API
+# Direct TCP connections to Supabase fail on free plan from Railway.
+# All DB operations go through Supabase PostgREST REST API
+# using the service role key (bypasses RLS).
 # =============================================================
 
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
-
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
-from sqlalchemy.pool import NullPool
-import asyncio
-
+import httpx
+from typing import Any, Optional
 from .config import settings
 
+HEADERS = {
+    "apikey":        settings.supabase_service_key,
+    "Authorization": f"Bearer {settings.supabase_service_key}",
+    "Content-Type":  "application/json",
+    "Accept":        "application/json",
+}
 
-# ── Determine driver ──────────────────────────────────────────
-# Use psycopg2 (sync) wrapped in async via asyncio thread pool
-_db_url = settings.db_url
-
-# If URL still has asyncpg (not yet normalised), fix it
-if "asyncpg" in _db_url:
-    _db_url = _db_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
-
-# Fix ssl param for psycopg2 (uses sslmode= not ssl=)
-if "ssl=require" in _db_url and "sslmode=" not in _db_url:
-    _db_url = _db_url.replace("ssl=require", "sslmode=require")
-
-# ── Sync engine (psycopg2) ────────────────────────────────────
-sync_engine = create_engine(
-    _db_url,
-    pool_size=2,
-    max_overflow=3,
-    pool_pre_ping=True,
-    pool_recycle=1800,
-    echo=settings.is_development,
-    connect_args={"sslmode": "require", "connect_timeout": 10},
-)
-
-SyncSessionFactory = sessionmaker(
-    sync_engine,
-    autocommit=False,
-    autoflush=False,
-    expire_on_commit=False,
-)
+SCHEMA = "auth_portal"
 
 
-# ── Async wrapper ─────────────────────────────────────────────
-# Wrap sync session in async interface using run_in_executor
-class AsyncSyncSession:
-    """Minimal async wrapper around a sync SQLAlchemy session."""
+def _headers(prefer: str = "") -> dict:
+    h = {**HEADERS}
+    h["Accept-Profile"]  = SCHEMA
+    h["Content-Profile"] = SCHEMA
+    if prefer:
+        h["Prefer"] = prefer
+    return h
 
-    def __init__(self, session: Session):
-        self._session = session
-        self._loop = asyncio.get_event_loop()
 
-    async def execute(self, stmt, *args, **kwargs):
-        return await self._loop.run_in_executor(
-            None, lambda: self._session.execute(stmt, *args, **kwargs)
+BASE = f"{settings.supabase_url}/rest/v1"
+
+
+class SupabaseDB:
+    """Minimal async DB client over Supabase REST API."""
+
+    def __init__(self):
+        self._client = httpx.AsyncClient(timeout=10)
+
+    # ── auth_users ────────────────────────────────────────────
+
+    async def get_user_by_email(self, email: str) -> Optional[dict]:
+        r = await self._client.get(
+            f"{BASE}/auth_users",
+            headers=_headers(),
+            params={"email": f"eq.{email}", "limit": "1"},
         )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
 
-    async def flush(self):
-        await self._loop.run_in_executor(None, self._session.flush)
+    async def get_user_by_id(self, user_id: str) -> Optional[dict]:
+        r = await self._client.get(
+            f"{BASE}/auth_users",
+            headers=_headers(),
+            params={"id": f"eq.{user_id}", "limit": "1"},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
 
-    async def commit(self):
-        await self._loop.run_in_executor(None, self._session.commit)
+    async def create_user(self, data: dict) -> dict:
+        r = await self._client.post(
+            f"{BASE}/auth_users",
+            headers=_headers("return=representation"),
+            json=data,
+        )
+        r.raise_for_status()
+        return r.json()[0]
 
-    async def rollback(self):
-        await self._loop.run_in_executor(None, self._session.rollback)
+    async def update_user(self, user_id: str, data: dict) -> None:
+        r = await self._client.patch(
+            f"{BASE}/auth_users",
+            headers=_headers(),
+            params={"id": f"eq.{user_id}"},
+            json=data,
+        )
+        r.raise_for_status()
 
-    async def close(self):
-        await self._loop.run_in_executor(None, self._session.close)
+    # ── auth_sessions ─────────────────────────────────────────
 
-    def add(self, obj):
-        self._session.add(obj)
+    async def create_session(self, data: dict) -> dict:
+        r = await self._client.post(
+            f"{BASE}/auth_sessions",
+            headers=_headers("return=representation"),
+            json=data,
+        )
+        r.raise_for_status()
+        return r.json()[0]
 
-    async def scalar(self, stmt):
-        result = await self.execute(stmt)
-        return result.scalar()
+    async def get_session_by_token_hash(self, token_hash: str) -> Optional[dict]:
+        r = await self._client.get(
+            f"{BASE}/auth_sessions",
+            headers=_headers(),
+            params={"refresh_token_hash": f"eq.{token_hash}", "is_active": "eq.true", "limit": "1"},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
 
-    def __enter__(self):
-        return self
+    async def get_sessions_by_user(self, user_id: str) -> list[dict]:
+        r = await self._client.get(
+            f"{BASE}/auth_sessions",
+            headers=_headers(),
+            params={"user_id": f"eq.{user_id}", "is_active": "eq.true"},
+        )
+        r.raise_for_status()
+        return r.json()
 
-    def __exit__(self, *args):
-        self._session.close()
+    async def update_session(self, session_id: str, data: dict) -> None:
+        r = await self._client.patch(
+            f"{BASE}/auth_sessions",
+            headers=_headers(),
+            params={"id": f"eq.{session_id}"},
+            json=data,
+        )
+        r.raise_for_status()
+
+    async def revoke_all_user_sessions(self, user_id: str, except_id: str = "") -> None:
+        params: dict = {"user_id": f"eq.{user_id}", "is_active": "eq.true"}
+        if except_id:
+            params["id"] = f"neq.{except_id}"
+        r = await self._client.patch(
+            f"{BASE}/auth_sessions",
+            headers=_headers(),
+            params=params,
+            json={"is_active": False, "revoke_reason": "logout_all"},
+        )
+        r.raise_for_status()
+
+    # ── audit events ──────────────────────────────────────────
+
+    async def log_audit(self, data: dict) -> None:
+        try:
+            r = await self._client.post(
+                f"{BASE}/auth_audit_events",
+                headers=_headers(),
+                json=data,
+            )
+            r.raise_for_status()
+        except Exception:
+            pass  # audit failure must never break auth flow
+
+    # ── password reset tokens ─────────────────────────────────
+
+    async def create_password_reset_token(self, data: dict) -> dict:
+        r = await self._client.post(
+            f"{BASE}/password_reset_tokens",
+            headers=_headers("return=representation"),
+            json=data,
+        )
+        r.raise_for_status()
+        return r.json()[0]
+
+    async def get_password_reset_token(self, token_hash: str) -> Optional[dict]:
+        r = await self._client.get(
+            f"{BASE}/password_reset_tokens",
+            headers=_headers(),
+            params={"token_hash": f"eq.{token_hash}", "used": "eq.false", "limit": "1"},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
+
+    async def mark_reset_token_used(self, token_id: str) -> None:
+        r = await self._client.patch(
+            f"{BASE}/password_reset_tokens",
+            headers=_headers(),
+            params={"id": f"eq.{token_id}"},
+            json={"used": True},
+        )
+        r.raise_for_status()
+
+    # ── email verification tokens ─────────────────────────────
+
+    async def create_email_verification_token(self, data: dict) -> dict:
+        r = await self._client.post(
+            f"{BASE}/email_verification_tokens",
+            headers=_headers("return=representation"),
+            json=data,
+        )
+        r.raise_for_status()
+        return r.json()[0]
+
+    async def get_email_verification_token(self, token_hash: str) -> Optional[dict]:
+        r = await self._client.get(
+            f"{BASE}/email_verification_tokens",
+            headers=_headers(),
+            params={"token_hash": f"eq.{token_hash}", "used": "eq.false", "limit": "1"},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
+
+    async def mark_email_verified(self, token_id: str, user_id: str) -> None:
+        # Mark token used
+        await self._client.patch(
+            f"{BASE}/email_verification_tokens",
+            headers=_headers(),
+            params={"id": f"eq.{token_id}"},
+            json={"used": True},
+        )
+        # Mark user verified
+        await self.update_user(user_id, {"email_verified": True})
+
+    # ── health ────────────────────────────────────────────────
+
+    async def health(self) -> bool:
+        try:
+            r = await self._client.get(
+                f"{BASE}/auth_users",
+                headers=_headers(),
+                params={"limit": "0"},
+            )
+            return r.status_code < 500
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        await self._client.aclose()
 
 
-# ── Base model ────────────────────────────────────────────────
+# ── Singleton ─────────────────────────────────────────────────
+_db: Optional[SupabaseDB] = None
+
+
+def get_db_client() -> SupabaseDB:
+    global _db
+    if _db is None:
+        _db = SupabaseDB()
+    return _db
+
+
+async def check_db_health() -> bool:
+    return await get_db_client().health()
+
+
+# ── FastAPI dependency ────────────────────────────────────────
+async def db_dependency():
+    yield get_db_client()
+
+
+# ── Legacy Base for model imports (no-op) ────────────────────
+from sqlalchemy.orm import DeclarativeBase
 class Base(DeclarativeBase):
     pass
-
-
-# ── Dependency ────────────────────────────────────────────────
-async def db_dependency() -> AsyncGenerator[AsyncSyncSession, None]:
-    session = SyncSessionFactory()
-    wrapped = AsyncSyncSession(session)
-    try:
-        yield wrapped
-        await wrapped.commit()
-    except Exception:
-        await wrapped.rollback()
-        raise
-    finally:
-        await wrapped.close()
-
-
-# ── Health check ──────────────────────────────────────────────
-async def check_db_health() -> bool:
-    loop = asyncio.get_event_loop()
-    try:
-        def _check():
-            with sync_engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-        await loop.run_in_executor(None, _check)
-        return True
-    except Exception:
-        return False
