@@ -30,10 +30,20 @@ class Settings(BaseSettings):
     @field_validator("db_url", mode="before")
     @classmethod
     def ensure_ssl(cls, v: str) -> str:
-        """Supabase session pooler requires SSL — add if not present."""
-        if isinstance(v, str) and "ssl=" not in v and "sslmode=" not in v:
+        """
+        Normalise DB URL for Railway → Supabase:
+        - Switch asyncpg driver to psycopg2 (more reliable with Supabase pooler)
+        - Ensure SSL is set
+        """
+        if not isinstance(v, str):
+            return v
+        # Switch driver
+        v = v.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+        v = v.replace("postgresql://", "postgresql+psycopg2://")
+        # Ensure SSL
+        if "sslmode=" not in v and "ssl=" not in v:
             sep = "&" if "?" in v else "?"
-            return f"{v}{sep}ssl=require"
+            v = f"{v}{sep}sslmode=require"
         return v
 
     # ── Redis ─────────────────────────────────────────────────
