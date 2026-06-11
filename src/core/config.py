@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     env:               Literal["development", "staging", "production"] = "production"
     deployment_model:  Literal["saas", "paas", "on_prem"] = "saas"
     service_name:      str = "ficium-auth"
-    version:           str = "1.0.0"
+    version:           str = "1.0.1"
 
     # ── Server ────────────────────────────────────────────────
     host:   str = "0.0.0.0"
