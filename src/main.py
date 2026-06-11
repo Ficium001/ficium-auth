@@ -52,10 +52,10 @@ app = FastAPI(
 )
 
 # ── Security middleware ───────────────────────────────────────
-# Only accept requests from Caddy proxy (TrustedHost)
-if settings.is_production:
-    _trusted = [settings.session_cookie_domain, "*.railway.app", "*.up.railway.app", "localhost"]
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted)
+# TrustedHostMiddleware — only for Caddy proxy (on-prem/PaaS deployment)
+# Disabled on Railway where the public domain varies
+# if settings.is_production:
+#     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[...])
 
 # CORS — portal domain + Vercel deployments
 _allowed_origins = [o.strip() for o in getattr(settings, "allowed_origins", "").split(",") if o.strip()]
