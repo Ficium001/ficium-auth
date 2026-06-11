@@ -24,8 +24,17 @@ class Settings(BaseSettings):
 
     # ── Database ──────────────────────────────────────────────
     db_url:      str = Field(..., description="PostgreSQL async DSN")
-    db_pool_min: int = 5
-    db_pool_max: int = 20
+    db_pool_min: int = 2
+    db_pool_max: int = 5
+
+    @field_validator("db_url", mode="before")
+    @classmethod
+    def ensure_ssl(cls, v: str) -> str:
+        """Supabase session pooler requires SSL — add if not present."""
+        if isinstance(v, str) and "ssl=" not in v and "sslmode=" not in v:
+            sep = "&" if "?" in v else "?"
+            return f"{v}{sep}ssl=require"
+        return v
 
     # ── Redis ─────────────────────────────────────────────────
     redis_url:      str = Field(..., description="Redis DSN")
