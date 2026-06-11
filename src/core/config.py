@@ -95,7 +95,8 @@ class Settings(BaseSettings):
     saml_entity_id:       str = ""
     saml_acs_url:         str = ""
 
-    # ── LDAP (on-prem — Phase 2) ──────────────────────────────
+    # ── CORS ──────────────────────────────────────────────────
+    allowed_origins: str = ""   # comma-separated, e.g. https://portal.ficium.net,https://ficium-portal.vercel.app
     ldap_url:             str = ""
     ldap_base_dn:         str = ""
     ldap_bind_dn:         str = ""
