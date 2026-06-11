@@ -5,7 +5,7 @@
 # =============================================================
 
 from pydantic_settings import BaseSettings
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator
 from typing import Literal
 import secrets
 
@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     # Private key signs tokens; public key shared with Supabase for RLS
     jwt_private_key:  str = Field(..., description="RSA private key PEM")
     jwt_public_key:   str = Field(..., description="RSA public key PEM")
+
+    @field_validator("jwt_private_key", "jwt_public_key", mode="before")
+    @classmethod
+    def normalise_pem(cls, v: str) -> str:
+        """Replace escaped \\n with real newlines — Railway env var workaround."""
+        if isinstance(v, str):
+            return v.replace("\\n", "\n")
+        return v
     jwt_algorithm:    str = "RS256"
     jwt_access_ttl:   int = 900        # 15 minutes
     jwt_refresh_ttl:  int = 28800      # 8 hours (bank working day)
