@@ -9,26 +9,21 @@ import httpx
 from typing import Any, Optional
 from .config import settings
 
-HEADERS = {
-    "apikey":        settings.supabase_service_key,
-    "Authorization": f"Bearer {settings.supabase_service_key}",
-    "Content-Type":  "application/json",
-    "Accept":        "application/json",
-}
-
 SCHEMA = "auth_portal"
-
+BASE   = f"{settings.supabase_url}/rest/v1"
 
 def _headers(prefer: str = "") -> dict:
-    h = {**HEADERS}
-    h["Accept-Profile"]  = SCHEMA
-    h["Content-Profile"] = SCHEMA
+    h = {
+        "apikey":          settings.supabase_service_key,
+        "Authorization":   f"Bearer {settings.supabase_service_key}",
+        "Content-Type":    "application/json",
+        "Accept":          "application/json",
+        "Accept-Profile":  SCHEMA,
+        "Content-Profile": SCHEMA,
+    }
     if prefer:
         h["Prefer"] = prefer
     return h
-
-
-BASE = f"{settings.supabase_url}/rest/v1"
 
 
 class SupabaseDB:
