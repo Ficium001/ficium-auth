@@ -57,16 +57,19 @@ app = FastAPI(
 # if settings.is_production:
 #     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[...])
 
-# CORS — portal domain + Vercel deployments
+# CORS — explicit production origins + regex for dynamic Vercel previews
 _allowed_origins = [o.strip() for o in getattr(settings, "allowed_origins", "").split(",") if o.strip()]
 if not _allowed_origins:
     _allowed_origins = [f"https://{settings.session_cookie_domain}"]
 
+_origin_regex = getattr(settings, "allowed_origin_regex", "") or None
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    allow_origin_regex=_origin_regex,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     expose_headers=["X-Request-ID"],
 )
