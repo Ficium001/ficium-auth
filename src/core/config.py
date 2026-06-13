@@ -124,7 +124,10 @@ class Settings(BaseSettings):
     saml_acs_url:         str = ""
 
     # ── CORS ──────────────────────────────────────────────────
-    allowed_origins: str = ""   # comma-separated, e.g. https://portal.ficium.net,https://ficium-portal.vercel.app
+    allowed_origins: str = ""   # comma-separated exact origins, e.g. https://portal.ficium.net,https://ficium-portal.vercel.app
+    # Regex matching dynamic origins (e.g. Vercel preview deployments).
+    # Defaults to the ficium-portal Vercel project's preview + production pattern.
+    allowed_origin_regex: str = r"^https://ficium-portal[a-z0-9.\-]*\.vercel\.app$"
     ldap_url:             str = ""
     ldap_base_dn:         str = ""
     ldap_bind_dn:         str = ""
