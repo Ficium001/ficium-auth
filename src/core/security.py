@@ -146,6 +146,40 @@ def verify_access_token(token: str) -> dict[str, Any]:
     )
 
 
+def verify_keypair_config() -> None:
+    """
+    Fail-fast startup check: confirm the configured keys can BOTH sign and
+    verify a token. Catches the common production misconfig where the private
+    key is valid (tokens issue fine at login) but the public key is malformed
+    or mismatched (every authenticated request then 500s on verify).
+
+    Raises RuntimeError with an actionable message if misconfigured.
+    """
+    try:
+        token, _ = issue_access_token(
+            user_id="_selftest",
+            institution_id="_selftest",
+            role="_selftest",
+            session_id="_selftest",
+        )
+    except Exception as e:  # noqa: BLE001 — surface any signing failure clearly
+        raise RuntimeError(
+            f"JWT SIGNING key is invalid — tokens cannot be issued. "
+            f"Check JWT_PRIVATE_KEY (or SUPABASE_JWT_SECRET if using HS256). "
+            f"Underlying error: {e}"
+        ) from e
+
+    try:
+        verify_access_token(token)
+    except Exception as e:  # noqa: BLE001 — surface any verify failure clearly
+        raise RuntimeError(
+            f"JWT VERIFY key is invalid — tokens can be signed but NOT verified, "
+            f"so every authenticated request will fail. Check that JWT_PUBLIC_KEY is the "
+            f"SPKI PEM ('-----BEGIN PUBLIC KEY-----') matching JWT_PRIVATE_KEY. "
+            f"Underlying error: {e}"
+        ) from e
+
+
 def get_token_from_header(authorization: str | None) -> str | None:
     """Extract Bearer token from Authorization header."""
     if not authorization:

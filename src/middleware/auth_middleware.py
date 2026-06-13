@@ -6,11 +6,14 @@
 from typing import Optional
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError
+from jose.exceptions import JOSEError
+import structlog
 
 from ..core.security import verify_access_token, get_token_from_header
 from ..core.redis import is_token_blacklisted
 from ..core.config import settings
+
+log = structlog.get_logger()
 
 security = HTTPBearer(auto_error=False)
 
@@ -45,7 +48,11 @@ async def get_current_user(
 
     try:
         claims = verify_access_token(token)
-    except JWTError:
+    except JOSEError as e:
+        # JWTError (expired/invalid) AND JWKError (key deserialization/config)
+        # both subclass JOSEError. Catching only JWTError previously let JWKError
+        # escape as a 500 leaking a stack trace. Log the real cause, return 401.
+        log.warning("token_verification_failed", error_type=type(e).__name__, error=str(e))
         raise HTTPException(status_code=401, detail="Invalid or expired token.")
 
     # Check token blacklist (revoked tokens)

@@ -14,6 +14,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from .core.config import settings
 from .core.redis import get_redis, close_redis
+from .core.security import verify_keypair_config
 from .api.auth import router as auth_router
 from .api.health import router as health_router
 
@@ -34,6 +35,16 @@ log = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("ficium_auth_starting", env=settings.env, version=settings.version)
+
+    # Fail-fast: a signing/verify keypair that can't round-trip means every
+    # authenticated request would 500. Surface it here, in deploy logs.
+    try:
+        verify_keypair_config()
+        log.info("jwt_keypair_verified")
+    except RuntimeError as e:
+        log.critical("jwt_keypair_invalid", error=str(e))
+        raise
+
     await get_redis()                           # warm Redis connection pool
     log.info("ficium_auth_ready")
     yield
