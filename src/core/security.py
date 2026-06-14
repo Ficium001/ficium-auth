@@ -73,23 +73,28 @@ def validate_password_policy(password: str) -> None:
 
 
 # ── JWT signing ───────────────────────────────────────────────
-# Uses HS256 with Supabase JWT secret (free plan compatible).
-# Supabase trusts these tokens natively — no RS256 Pro plan needed.
+# Deterministic mode via settings.auth_signing_mode (default "rs256").
+# RS256: ficium-auth signs with its RSA keypair; ficium-portal-api verifies
+# via the published JWKS. Portable across SaaS / client-cloud / on-prem.
+
+def _use_supabase_hs256() -> bool:
+    return settings.auth_signing_mode == "supabase_hs256" and bool(settings.supabase_jwt_secret)
+
 
 def _jwt_sign_key() -> str:
     """Return the key to sign JWTs with."""
-    if settings.supabase_jwt_secret:
+    if _use_supabase_hs256():
         return settings.supabase_jwt_secret
     return settings.jwt_private_key
 
 def _jwt_verify_key() -> str:
     """Return the key to verify JWTs with."""
-    if settings.supabase_jwt_secret:
+    if _use_supabase_hs256():
         return settings.supabase_jwt_secret
     return settings.jwt_public_key
 
 def _jwt_algorithm() -> str:
-    if settings.supabase_jwt_secret:
+    if _use_supabase_hs256():
         return "HS256"
     return settings.jwt_algorithm
 
@@ -112,10 +117,12 @@ def issue_access_token(
     exp = now + settings.jwt_access_ttl
 
     payload: dict[str, Any] = {
-        # Supabase-required claims for auth.jwt() and RLS to work
-        "iss":  "supabase",
+        # Issuer is ficium-auth's own identity now (portal-api validates it).
+        # role/aud kept as "authenticated" so the Postgres auth.role() shim and
+        # any role-based policies resolve exactly as before.
+        "iss":  settings.jwt_issuer,
         "ref":  settings.supabase_url.split("//")[-1].split(".")[0] if settings.supabase_url else "",
-        "role": "authenticated",   # required by Supabase RLS
+        "role": "authenticated",
         "aud":  "authenticated",
         "sub":  user_id,
         "iat":  now,
@@ -123,7 +130,7 @@ def issue_access_token(
         "jti":  secrets.token_hex(16),
         # ficium custom claims
         "institution_id": institution_id,
-        "user_role":      role,      # use user_role to avoid clash with Supabase 'role'
+        "user_role":      role,      # avoid clash with the reserved 'role'
         "session_id":     session_id,
         "deployment":     deployment,
     }
@@ -131,7 +138,9 @@ def issue_access_token(
     if extra_claims:
         payload.update(extra_claims)
 
-    token = jwt.encode(payload, _jwt_sign_key(), algorithm=_jwt_algorithm())
+    # Set kid in RS256 mode so verifiers can select the key from JWKS.
+    headers = None if _use_supabase_hs256() else {"kid": settings.jwt_key_id}
+    token = jwt.encode(payload, _jwt_sign_key(), algorithm=_jwt_algorithm(), headers=headers)
     return token, exp
 
 

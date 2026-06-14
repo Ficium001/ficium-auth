@@ -65,6 +65,18 @@ class Settings(BaseSettings):
     jwt_algorithm:    str = "RS256"
     jwt_access_ttl:   int = 900        # 15 minutes
     jwt_refresh_ttl:  int = 28800      # 8 hours (bank working day)
+
+    # Deterministic signing mode (do NOT infer from secret presence).
+    #   rs256          → sign with the RSA keypair; ficium-portal-api verifies
+    #                    via JWKS. The portable, default mode for all models.
+    #   supabase_hs256 → legacy: sign HS256 with the Supabase JWT secret.
+    auth_signing_mode: str = "rs256"
+    # Stable key id published in JWKS and set in every token header so
+    # verifiers (ficium-portal-api) can select the right key across rotations.
+    jwt_key_id:        str = "ficium-auth-rs256-1"
+    # Token issuer. ficium-portal-api validates this; keep it ficium-auth's own
+    # identity now that Supabase no longer verifies our tokens.
+    jwt_issuer:        str = "https://ficium-auth-production.up.railway.app"
     jwt_issuer:       str = "ficium-auth"
     jwt_audience:     str = "authenticated"   # Supabase expects 'authenticated' for RLS
 

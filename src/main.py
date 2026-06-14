@@ -16,6 +16,7 @@ from .core.config import settings
 from .core.redis import get_redis, close_redis
 from .api.auth import router as auth_router
 from .api.health import router as health_router
+from .api.jwks import router as jwks_router
 
 # ── Structured logging ────────────────────────────────────────
 structlog.configure(
@@ -98,6 +99,7 @@ if settings.metrics_enabled:
 
 # ── Routers ───────────────────────────────────────────────────
 app.include_router(health_router)
+app.include_router(jwks_router)
 app.include_router(auth_router)
 
 
