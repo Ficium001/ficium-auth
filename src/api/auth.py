@@ -222,6 +222,7 @@ async def login(
         institution_id=user["institution_id"],
         role=user["role"],
         session_id=session_id,
+        extra_claims={"email": user["email"]},
     )
 
     # Enforce concurrent session limit
@@ -346,6 +347,7 @@ async def refresh_token(
         institution_id=user["institution_id"],
         role=user["role"],
         session_id=new_session_id,
+        extra_claims={"email": user["email"]},
     )
     _set_refresh_cookie(response, new_raw_rt)
 
