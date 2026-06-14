@@ -1,9 +1,6 @@
 # =============================================================
 # ficium-auth — JWKS endpoint
 # GET /.well-known/jwks.json
-#
-# Publishes the RS256 public key so ficium-portal-api can verify
-# tokens without a shared secret. Cached in memory after first build.
 # =============================================================
 
 import base64
@@ -14,11 +11,19 @@ from ..core.config import settings
 
 router = APIRouter(tags=["JWKS"])
 
-# kid must match what issue_access_token() puts in the token header.
-# Keep in sync with security.py KID constant.
 _KID = "ficium-auth-rs256-v1"
-
 _jwks_cache: dict | None = None
+
+
+def _normalize_pem(pem: str) -> bytes:
+    """
+    Ensure the PEM has real newlines, not escaped \\n.
+    Railway stores multiline env vars as a single line with literal \\n.
+    """
+    normalized = pem.replace("\\n", "\n").strip()
+    if not normalized.endswith("\n"):
+        normalized += "\n"
+    return normalized.encode()
 
 
 def _b64url(n: int) -> str:
@@ -31,7 +36,8 @@ def _build_jwks() -> dict:
     pem = settings.jwt_public_key
     if not pem:
         raise ValueError("JWT_PUBLIC_KEY is not set")
-    pub = load_pem_public_key(pem.encode())
+    pem_bytes = _normalize_pem(pem)
+    pub = load_pem_public_key(pem_bytes)
     if not isinstance(pub, RSAPublicKey):
         raise ValueError("JWT_PUBLIC_KEY is not an RSA public key")
     nums = pub.public_numbers()
@@ -59,4 +65,3 @@ async def jwks() -> dict:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"JWKS build failed: {exc}") from exc
     return _jwks_cache
-
