@@ -44,6 +44,16 @@ class SupabaseDB:
         rows = r.json()
         return rows[0] if rows else None
 
+    async def get_user_by_username(self, username: str) -> Optional[dict]:
+        r = await self._client.get(
+            f"{BASE}/auth_users",
+            headers=_headers(),
+            params={"username": f"eq.{username}", "limit": "1"},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
+
     async def get_user_by_id(self, user_id: str) -> Optional[dict]:
         r = await self._client.get(
             f"{BASE}/auth_users",
