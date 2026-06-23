@@ -148,3 +148,10 @@ class MeResponse(BaseModel):
     institution_id: str
     email_verified: bool
     mfa_enabled:    bool = False
+
+
+# ── Health ────────────────────────────────────────────────────
+class HealthResponse(BaseModel):
+    status:  str
+    version: str
+    checks:  dict
