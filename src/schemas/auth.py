@@ -37,13 +37,13 @@ class RegisterResponse(BaseModel):
 
 # ── Login ─────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
-    email:      EmailStr
-    password:   str     = Field(..., min_length=1, max_length=128)
-    remember_me: bool   = False
+    username:    str  = Field(..., min_length=1, max_length=60)
+    password:    str  = Field(..., min_length=1, max_length=128)
+    remember_me: bool = False
 
-    @field_validator("email")
+    @field_validator("username")
     @classmethod
-    def normalise_email(cls, v: str) -> str:
+    def normalise_username(cls, v: str) -> str:
         return v.strip().lower()
 
 
@@ -95,34 +95,17 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ForgotPasswordResponse(BaseModel):
-    message: str = "If an account exists for that email, a reset link has been sent."
+    message: str
 
 
 class ResetPasswordRequest(BaseModel):
-    token:           str
-    new_password:    str = Field(..., min_length=12, max_length=128)
-    confirm_password: str
-
-    @field_validator("confirm_password")
-    @classmethod
-    def passwords_match(cls, v: str, info) -> str:
-        if "new_password" in info.data and v != info.data["new_password"]:
-            raise ValueError("Passwords do not match.")
-        return v
+    token:        str
+    new_password: str = Field(..., min_length=12, max_length=128)
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
+    current_password: str = Field(..., min_length=1, max_length=128)
     new_password:     str = Field(..., min_length=12, max_length=128)
-    confirm_password: str
-    totp_code:        Optional[str] = None   # required if MFA enrolled
-
-    @field_validator("confirm_password")
-    @classmethod
-    def passwords_match(cls, v: str, info) -> str:
-        if "new_password" in info.data and v != info.data["new_password"]:
-            raise ValueError("Passwords do not match.")
-        return v
 
 
 class PasswordActionResponse(BaseModel):
@@ -137,57 +120,31 @@ class VerifyEmailRequest(BaseModel):
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
+    @field_validator("email")
+    @classmethod
+    def normalise_email(cls, v: str) -> str:
+        return v.strip().lower()
+
 
 # ── Sessions ──────────────────────────────────────────────────
 class SessionInfo(BaseModel):
-    session_id:    str
-    ip_address:    Optional[str]
-    user_agent:    Optional[str]
-    created_at:    datetime
-    last_used_at:  datetime
-    expires_at:    datetime
-    is_current:    bool = False
+    id:           str
+    ip_address:   Optional[str] = None
+    user_agent:   Optional[str] = None
+    created_at:   str
+    last_used_at: Optional[str] = None
+    is_current:   bool = False
 
 
 class SessionListResponse(BaseModel):
     sessions: list[SessionInfo]
-    total:    int
 
 
-# ── Current user ──────────────────────────────────────────────
+# ── Me ────────────────────────────────────────────────────────
 class MeResponse(BaseModel):
     user_id:        str
     email:          str
-    email_verified: bool
     role:           str
     institution_id: str
-    mfa_enabled:    bool
-    last_login_at:  Optional[datetime]
-    last_login_ip:  Optional[str]
-
-
-# ── IP allowlist ──────────────────────────────────────────────
-class IPAllowlistEntry(BaseModel):
-    id:    str
-    cidr:  str
-    label: Optional[str]
-    created_at: datetime
-
-
-class AddIPRequest(BaseModel):
-    cidr:  str = Field(..., pattern=r"^(\d{1,3}\.){3}\d{1,3}(/\d{1,2})?$")
-    label: Optional[str] = Field(None, max_length=100)
-
-
-# ── Health ────────────────────────────────────────────────────
-class HealthResponse(BaseModel):
-    status:   str
-    version:  str
-    checks:   dict[str, bool]
-
-
-# ── Error ─────────────────────────────────────────────────────
-class ErrorResponse(BaseModel):
-    error:   str
-    message: str
-    code:    Optional[str] = None
+    email_verified: bool
+    mfa_enabled:    bool = False
