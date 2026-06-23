@@ -2,20 +2,17 @@ name: ficium-auth Keepalive
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping ficium-auth /health
+      - name: Ping ficium-auth /health/live
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://ficium-auth-production.up.railway.app/health)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://ficium-auth-production.up.railway.app/health/live)
           echo "ficium-auth health: $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "Warning: ficium-auth returned $STATUS"
-          fi
 
       - name: Ping portal-api /health
         run: |
