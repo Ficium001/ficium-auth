@@ -185,7 +185,7 @@ async def login(
     if await is_locked_out(ip):
         raise HTTPException(429, "Account temporarily locked due to repeated failed attempts.")
 
-    user = await db.get_user_by_email(body.email)
+    user = await db.get_user_by_username(body.username)
 
     dummy_hash = "$argon2id$v=19$m=65536,t=3,p=4$dummy$dummy"
     pw_ok = verify_password(body.password, user["password_hash"] if user else dummy_hash)
@@ -197,9 +197,9 @@ async def login(
             "event_type": "login.failed",
             "outcome":    "failed",
             "ip_address": ip,
-            "event_metadata": {"email": body.email},
+            "event_metadata": {"username": body.username},
         })
-        raise HTTPException(401, "Incorrect email or password.")
+        raise HTTPException(401, "Incorrect username or password.")
 
     if not user["is_active"]:
         raise HTTPException(403, "Account is deactivated. Contact your administrator.")
@@ -385,7 +385,7 @@ async def forgot_password(
     if not allowed:
         raise HTTPException(429, "Too many requests.")
 
-    user = await db.get_user_by_email(body.email)
+    user = await db.get_user_by_username(body.username)
     msg  = ForgotPasswordResponse(message="If that email exists, a reset link has been sent.")
 
     if not user:
