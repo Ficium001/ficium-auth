@@ -284,17 +284,23 @@ async def force_change_password(
     Used when must_change_password=true. User is already authenticated —
     just validate and set the new password, then clear the flag.
     """
+    log.info("force_change_attempt", user_id=current.user_id)
     if len(body.new_password) < 12:
         raise HTTPException(400, "Password must be at least 12 characters.")
 
     ph = PasswordHasher()
     new_hash = ph.hash(body.new_password)
 
-    await db.update_user(current.user_id, {
-        "password_hash":        new_hash,
-        "must_change_password": False,
-        "updated_at":           datetime.now(timezone.utc).isoformat(),
-    })
+    try:
+        await db.update_user(current.user_id, {
+            "password_hash":        new_hash,
+            "must_change_password": False,
+            "updated_at":           datetime.now(timezone.utc).isoformat(),
+        })
+        log.info("force_change_success", user_id=current.user_id)
+    except Exception as e:
+        log.error("force_change_db_error", user_id=current.user_id, error=str(e))
+        raise HTTPException(500, f"Failed to update password: {str(e)}")
 
     await db.log_audit({
         "user_id":        current.user_id,
