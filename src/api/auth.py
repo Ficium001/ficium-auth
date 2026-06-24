@@ -27,7 +27,7 @@ from ..schemas.auth import (
     RegisterRequest, RegisterResponse,
     LoginRequest, LoginResponse,
     ForgotPasswordRequest, ForgotPasswordResponse,
-    ResetPasswordRequest, ChangePasswordRequest, PasswordActionResponse,
+    ResetPasswordRequest, ChangePasswordRequest, ForceChangePasswordRequest, PasswordActionResponse,
     VerifyEmailRequest, ResendVerificationRequest,
     SessionListResponse, SessionInfo, MeResponse,
 )
@@ -275,26 +275,21 @@ async def login(
 # ── Forced password change (after admin reset) ────────────────
 @router.post("/password/force-change", response_model=PasswordActionResponse)
 async def force_change_password(
-    body:    ChangePasswordRequest,
+    body:    ForceChangePasswordRequest,
     request: Request,
     db:      SupabaseDB = Depends(db_dependency),
     current: AuthenticatedUser = Depends(get_current_user),
 ) -> PasswordActionResponse:
     """
-    Used when must_change_password=true. Verifies current (temp) password,
-    sets the new one, and clears the must_change_password flag.
+    Used when must_change_password=true. User is already authenticated —
+    just validate and set the new password, then clear the flag.
     """
-    user = await db.get_user_by_id(current.user_id)
-    if not user:
-        raise HTTPException(404, "User not found.")
+    if len(body.new_password) < 12:
+        raise HTTPException(400, "Password must be at least 12 characters.")
 
     ph = PasswordHasher()
-    try:
-        ph.verify(user["password_hash"], body.current_password)
-    except Exception:
-        raise HTTPException(401, "Current password is incorrect.")
-
     new_hash = ph.hash(body.new_password)
+
     await db.update_user(current.user_id, {
         "password_hash":        new_hash,
         "must_change_password": False,
