@@ -288,8 +288,7 @@ async def force_change_password(
     if len(body.new_password) < 12:
         raise HTTPException(400, "Password must be at least 12 characters.")
 
-    ph = PasswordHasher()
-    new_hash = ph.hash(body.new_password)
+    new_hash = hash_password(body.new_password)
 
     try:
         await db.update_user(current.user_id, {
