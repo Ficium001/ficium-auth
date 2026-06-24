@@ -48,11 +48,12 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token:  Optional[str] = None
-    token_type:    str           = "bearer"
-    expires_in:    Optional[int] = None
-    mfa_required:  bool          = False
-    mfa_token:     Optional[str] = None   # short-lived, for /auth/mfa/verify
+    access_token:         Optional[str] = None
+    token_type:           str           = "bearer"
+    expires_in:           Optional[int] = None
+    mfa_required:         bool          = False
+    mfa_token:            Optional[str] = None   # short-lived, for /auth/mfa/verify
+    must_change_password: bool          = False   # true after admin password reset
 
 
 # ── MFA ───────────────────────────────────────────────────────
