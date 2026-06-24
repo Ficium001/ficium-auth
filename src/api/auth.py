@@ -272,6 +272,44 @@ async def login(
     )
 
 
+# ── Forced password change (after admin reset) ────────────────
+@router.post("/password/force-change", response_model=PasswordActionResponse)
+async def force_change_password(
+    body:    ChangePasswordRequest,
+    request: Request,
+    db:      SupabaseDB = Depends(db_dependency),
+    current: AuthenticatedUser = Depends(get_current_user),
+) -> PasswordActionResponse:
+    """
+    Used when must_change_password=true. Verifies current (temp) password,
+    sets the new one, and clears the must_change_password flag.
+    """
+    user = await db.get_user_by_id(current.user_id)
+    if not user:
+        raise HTTPException(404, "User not found.")
+
+    ph = PasswordHasher()
+    try:
+        ph.verify(user["password_hash"], body.current_password)
+    except Exception:
+        raise HTTPException(401, "Current password is incorrect.")
+
+    new_hash = ph.hash(body.new_password)
+    await db.update_user(current.user_id, {
+        "password_hash":        new_hash,
+        "must_change_password": False,
+        "updated_at":           datetime.now(timezone.utc).isoformat(),
+    })
+
+    await db.log_audit({
+        "user_id":        current.user_id,
+        "event_type":     "password_force_changed",
+        "event_metadata": {"ip": get_client_ip(request)},
+    })
+
+    return PasswordActionResponse(message="Password updated successfully.")
+
+
 # ── Logout ────────────────────────────────────────────────────
 @router.post("/logout")
 async def logout(
