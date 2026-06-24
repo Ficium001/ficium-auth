@@ -163,3 +163,7 @@ class HealthResponse(BaseModel):
     status:  str
     version: str
     checks:  dict
+
+
+class ForceChangePasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=12, max_length=128)
