@@ -385,8 +385,13 @@ async def forgot_password(
     if not allowed:
         raise HTTPException(429, "Too many requests.")
 
-    user = await db.get_user_by_username(body.username)
-    msg  = ForgotPasswordResponse(message="If that email exists, a reset link has been sent.")
+    # Resolve user by username (primary) or email (fallback)
+    user = None
+    if body.username:
+        user = await db.get_user_by_username(body.username)
+    if not user and body.email:
+        user = await db.get_user_by_email(body.email)
+    msg = ForgotPasswordResponse(message="If that account exists, a reset link has been sent.")
 
     if not user:
         return msg
