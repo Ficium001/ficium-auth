@@ -265,7 +265,11 @@ async def login(
         "event_metadata": {"session_id": session_id},
     })
 
-    return LoginResponse(access_token=access_token, expires_in=settings.jwt_access_ttl)
+    return LoginResponse(
+        access_token=access_token,
+        expires_in=settings.jwt_access_ttl,
+        must_change_password=bool(user.get("must_change_password", False)),
+    )
 
 
 # ── Logout ────────────────────────────────────────────────────
@@ -351,7 +355,11 @@ async def refresh_token(
     )
     _set_refresh_cookie(response, new_raw_rt)
 
-    return LoginResponse(access_token=access_token, expires_in=settings.jwt_access_ttl)
+    return LoginResponse(
+        access_token=access_token,
+        expires_in=settings.jwt_access_ttl,
+        must_change_password=bool(user.get("must_change_password", False)),
+    )
 
 
 # ── Me ────────────────────────────────────────────────────────
