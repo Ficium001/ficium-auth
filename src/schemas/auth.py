@@ -86,12 +86,19 @@ class MFADisableRequest(BaseModel):
 
 # ── Password management ───────────────────────────────────────
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    # Accept either username or email — portal sends username since that's how users log in
+    username: Optional[str] = Field(None, min_length=1, max_length=60)
+    email:    Optional[str] = None
+
+    @field_validator("username")
+    @classmethod
+    def normalise_username(cls, v: str | None) -> str | None:
+        return v.strip().lower() if v else None
 
     @field_validator("email")
     @classmethod
-    def normalise_email(cls, v: str) -> str:
-        return v.strip().lower()
+    def normalise_email(cls, v: str | None) -> str | None:
+        return v.strip().lower() if v else None
 
 
 class ForgotPasswordResponse(BaseModel):
