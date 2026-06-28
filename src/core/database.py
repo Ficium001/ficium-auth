@@ -228,48 +228,53 @@ class SupabaseDB:
         self, user_id: str, institution_id: str
     ) -> list[str]:
         """
-        Fetch module_permissions from institution.group via
-        institution.member.custom_group_id.
+        Fetch module_permissions via a single RPC call to
+        auth_portal.get_member_module_permissions(email, institution_id).
 
-        institution.member.id != auth_portal.auth_users.id — they are
-        different UUIDs. We must resolve via email instead.
-        Fetches the auth_user email first, then looks up the member by email.
+        Rationale: auth_portal.auth_users.id != institution.member.id —
+        different UUIDs. We need to resolve via email. Rather than two
+        fragile REST hops (auth_users → member → group), we call an
+        auth_portal-schema SQL function that does the join server-side
+        in one round-trip, executed as service_role.
         """
-        # Step 1: get the user's email from auth_portal
+        # Step 1: get email from auth_portal.auth_users
         r = await self._client.get(
             f"{BASE}/auth_users",
             headers=_headers(),
-            params={"id": f"eq.{user_id}", "select": "email", "limit": "1"},
+            params={"id": f"eq.{user_id}", "select": "email,institution_id", "limit": "1"},
         )
         if r.status_code != 200 or not r.json():
             return []
-        email = r.json()[0].get("email", "")
-        if not email:
+        row = r.json()[0]
+        email = row.get("email", "")
+        # Use institution_id from the user record if caller didn't pass one
+        resolved_institution_id = institution_id or row.get("institution_id", "")
+        if not email or not resolved_institution_id:
             return []
 
-        # Step 2: look up institution.member by email, join to institution.group
-        inst_headers = {
-            "apikey":        settings.supabase_service_key,
-            "Authorization": f"Bearer {settings.supabase_service_key}",
-            "Content-Type":  "application/json",
-            "Accept":        "application/json",
-            "Accept-Profile": "institution",
+        # Step 2: single RPC call — auth_portal.get_member_module_permissions
+        rpc_headers = {
+            "apikey":          settings.supabase_service_key,
+            "Authorization":   f"Bearer {settings.supabase_service_key}",
+            "Content-Type":    "application/json",
+            "Accept":          "application/json",
+            "Accept-Profile":  "auth_portal",
+            "Content-Profile": "auth_portal",
         }
-        r2 = await self._client.get(
-            f"{settings.supabase_url}/rest/v1/member",
-            headers=inst_headers,
-            params={
-                "select":         "institution_group:custom_group_id(module_permissions)",
-                "email":          f"eq.{email}",
-                "institution_id": f"eq.{institution_id}",
-                "limit":          "1",
+        r2 = await self._client.post(
+            f"{settings.supabase_url}/rest/v1/rpc/get_member_module_permissions",
+            headers=rpc_headers,
+            json={
+                "p_email":          email,
+                "p_institution_id": resolved_institution_id,
             },
         )
-        if r2.status_code != 200 or not r2.json():
+        if r2.status_code != 200:
             return []
-        group = (r2.json()[0].get("institution_group") or {})
-        perms = group.get("module_permissions") or []
-        return perms if isinstance(perms, list) else []
+        result = r2.json()
+        if isinstance(result, list):
+            return result
+        return []
 
 
 # ── Singleton ─────────────────────────────────────────────────
