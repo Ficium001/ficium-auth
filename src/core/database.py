@@ -230,33 +230,44 @@ class SupabaseDB:
         """
         Fetch module_permissions from institution.group via
         institution.member.custom_group_id.
-        Returns [] if the member has no group or no permissions assigned.
-        Uses the institution schema (not auth_portal), so overrides Accept-Profile.
+
+        institution.member.id != auth_portal.auth_users.id — they are
+        different UUIDs. We must resolve via email instead.
+        Fetches the auth_user email first, then looks up the member by email.
         """
-        # Override schema header to hit institution.* tables
-        inst_headers = {
-            "apikey":          settings.supabase_service_key,
-            "Authorization":   f"Bearer {settings.supabase_service_key}",
-            "Content-Type":    "application/json",
-            "Accept":          "application/json",
-            "Accept-Profile":  "institution",
-        }
+        # Step 1: get the user's email from auth_portal
         r = await self._client.get(
+            f"{BASE}/auth_users",
+            headers=_headers(),
+            params={"id": f"eq.{user_id}", "select": "email", "limit": "1"},
+        )
+        if r.status_code != 200 or not r.json():
+            return []
+        email = r.json()[0].get("email", "")
+        if not email:
+            return []
+
+        # Step 2: look up institution.member by email, join to institution.group
+        inst_headers = {
+            "apikey":        settings.supabase_service_key,
+            "Authorization": f"Bearer {settings.supabase_service_key}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+            "Accept-Profile": "institution",
+        }
+        r2 = await self._client.get(
             f"{settings.supabase_url}/rest/v1/member",
             headers=inst_headers,
             params={
                 "select":         "institution_group:custom_group_id(module_permissions)",
-                "id":             f"eq.{user_id}",
+                "email":          f"eq.{email}",
                 "institution_id": f"eq.{institution_id}",
                 "limit":          "1",
             },
         )
-        if r.status_code != 200:
+        if r2.status_code != 200 or not r2.json():
             return []
-        rows = r.json()
-        if not rows:
-            return []
-        group = (rows[0].get("institution_group") or {})
+        group = (r2.json()[0].get("institution_group") or {})
         perms = group.get("module_permissions") or []
         return perms if isinstance(perms, list) else []
 
