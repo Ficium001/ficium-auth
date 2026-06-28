@@ -217,12 +217,22 @@ async def login(
 
     session_id         = str(uuid.uuid4())
     raw_rt, rt_hash    = generate_refresh_token()
+
+    # Fetch module permissions from institution.group via custom_group_id
+    module_permissions = await db.get_member_module_permissions(
+        user_id=user["id"],
+        institution_id=user["institution_id"],
+    )
+
     access_token, exp  = issue_access_token(
         user_id=user["id"],
         institution_id=user["institution_id"],
         role=user["role"],
         session_id=session_id,
-        extra_claims={"email": user["email"]},
+        extra_claims={
+            "email":              user["email"],
+            "module_permissions": module_permissions,
+        },
     )
 
     # Enforce concurrent session limit
@@ -384,12 +394,21 @@ async def refresh_token(
     })
     await add_user_session(user["id"], new_session_id)
 
+    # Re-fetch module permissions on token refresh (group may have changed)
+    module_permissions = await db.get_member_module_permissions(
+        user_id=user["id"],
+        institution_id=user["institution_id"],
+    )
+
     access_token, exp = issue_access_token(
         user_id=user["id"],
         institution_id=user["institution_id"],
         role=user["role"],
         session_id=new_session_id,
-        extra_claims={"email": user["email"]},
+        extra_claims={
+            "email":              user["email"],
+            "module_permissions": module_permissions,
+        },
     )
     _set_refresh_cookie(response, new_raw_rt)
 

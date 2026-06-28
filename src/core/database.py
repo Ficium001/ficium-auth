@@ -224,6 +224,42 @@ class SupabaseDB:
     async def close(self) -> None:
         await self._client.aclose()
 
+    async def get_member_module_permissions(
+        self, user_id: str, institution_id: str
+    ) -> list[str]:
+        """
+        Fetch module_permissions from institution.group via
+        institution.member.custom_group_id.
+        Returns [] if the member has no group or no permissions assigned.
+        Uses the institution schema (not auth_portal), so overrides Accept-Profile.
+        """
+        # Override schema header to hit institution.* tables
+        inst_headers = {
+            "apikey":          settings.supabase_service_key,
+            "Authorization":   f"Bearer {settings.supabase_service_key}",
+            "Content-Type":    "application/json",
+            "Accept":          "application/json",
+            "Accept-Profile":  "institution",
+        }
+        r = await self._client.get(
+            f"{settings.supabase_url}/rest/v1/member",
+            headers=inst_headers,
+            params={
+                "select":         "institution_group:custom_group_id(module_permissions)",
+                "id":             f"eq.{user_id}",
+                "institution_id": f"eq.{institution_id}",
+                "limit":          "1",
+            },
+        )
+        if r.status_code != 200:
+            return []
+        rows = r.json()
+        if not rows:
+            return []
+        group = (rows[0].get("institution_group") or {})
+        perms = group.get("module_permissions") or []
+        return perms if isinstance(perms, list) else []
+
 
 # ── Singleton ─────────────────────────────────────────────────
 _db: Optional[SupabaseDB] = None
