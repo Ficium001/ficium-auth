@@ -48,7 +48,12 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         httponly=settings.session_cookie_httponly,
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,
-        domain=settings.session_cookie_domain if settings.is_production else None,
+        # Only set Domain if explicitly configured — an unset/empty
+        # Domain makes this a host-only cookie scoped to whatever host
+        # actually issued it, which is always valid. A misconfigured
+        # Domain (e.g. one that isn't the issuing host or a parent of
+        # it) causes the browser to silently drop the cookie entirely.
+        domain=settings.session_cookie_domain or None,
         max_age=settings.jwt_refresh_ttl,
         path="/auth/refresh",
     )
@@ -109,7 +114,7 @@ async def register(
         "expires_at": expires_at,
     })
 
-    verify_url = f"https://{settings.session_cookie_domain}/verify-email?token={raw_token}"
+    verify_url = f"{settings.portal_public_url}/verify-email?token={raw_token}"
     try:
         await send_verification_email(body.email, verify_url)
     except Exception as e:
@@ -472,7 +477,7 @@ async def forgot_password(
         "ip_address": ip,
     })
 
-    reset_url = f"https://{settings.session_cookie_domain}/reset-password?token={raw_token}"
+    reset_url = f"{settings.portal_public_url}/reset-password?token={raw_token}"
     try:
         await send_password_reset_email(user["email"], reset_url)
     except Exception as e:

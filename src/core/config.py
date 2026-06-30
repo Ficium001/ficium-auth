@@ -85,9 +85,27 @@ class Settings(BaseSettings):
     session_max_concurrent:    int = 3       # max sessions per user
     session_cookie_name:       str = "ficium_rt"
     session_cookie_secure:     bool = True
-    session_cookie_samesite:   str = "strict"
+    # SameSite=None is required because ficium-portal (Vercel) and
+    # ficium-auth (Railway) are different registrable domains — this is
+    # a genuinely cross-site request, not a subdomain relationship.
+    # SameSite=Strict/Lax cookies are never sent in that case and every
+    # /auth/refresh call will 401 with "No refresh token."
+    session_cookie_samesite:   str = "none"
     session_cookie_httponly:   bool = True
-    session_cookie_domain:     str = "portal.ficium.net"
+    # Leave empty unless ficium-auth is served from a host that is
+    # actually a parent domain of the portal (e.g. both under
+    # *.ficium.net). The browser silently REJECTS a Set-Cookie whose
+    # Domain attribute isn't the issuing host or a parent of it — e.g.
+    # a railway.app host can never set Domain=ficium.net. Empty means
+    # "host-only cookie", which always works and is the safe default.
+    session_cookie_domain:     str = ""
+
+    # Public URL of the ficium-portal frontend, used to build links in
+    # emails (verification, password reset). This is intentionally
+    # separate from session_cookie_domain — they serve different
+    # purposes and conflating them previously broke email links
+    # whenever the cookie domain was correctly left unset.
+    portal_public_url:         str = "https://ficium-portal.vercel.app"
 
     # ── Rate limiting ─────────────────────────────────────────
     rate_limit_login:          int = 5       # attempts per minute per IP
