@@ -72,13 +72,27 @@ async def require_role(*roles: str):
 
 
 def get_client_ip(request: Request) -> str:
-    """Extract real client IP, respecting X-Real-IP from Caddy."""
-    return (
-        request.headers.get("X-Real-IP")
-        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or request.client.host
-        or "unknown"
-    )
+    """
+    Extract the real client IP for rate-limiting and lockout.
+
+    SECURITY: X-Forwarded-For / X-Real-IP are client-supplied and trivially
+    spoofable. An attacker who can set these headers could rotate a fake IP
+    on every request to bypass per-IP rate limiting and account lockout
+    entirely. We therefore only trust the LAST hop appended by our own
+    trusted proxy (Railway's edge), not the first value in the chain.
+
+    Railway/Caddy appends the genuine peer IP as the rightmost entry of
+    X-Forwarded-For. We take that, and only fall back to the raw socket
+    peer (request.client.host) — never the client-controlled first entry.
+    """
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        # Rightmost entry is the one appended by our trusted edge proxy.
+        # Everything to the left is attacker-controllable and ignored.
+        hops = [h.strip() for h in xff.split(",") if h.strip()]
+        if hops:
+            return hops[-1]
+    return (request.client.host if request.client else None) or "unknown"
 
 
 def get_user_agent(request: Request) -> str:
