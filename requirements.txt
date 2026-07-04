@@ -1,32 +1,32 @@
 # Web framework
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
-python-multipart==0.0.12
+fastapi==0.139.0
+uvicorn[standard]==0.50.0
+python-multipart==0.0.32
 
 # Database — Supabase REST API (no direct TCP connection needed)
 # asyncpg and SQLAlchemy kept for model definitions only
-asyncpg==0.30.0
-psycopg2-binary==2.9.10
-sqlalchemy[asyncio]==2.0.36
+asyncpg==0.31.0
+psycopg2-binary==2.9.12
+sqlalchemy[asyncio]==2.0.51
 
 # Redis
 redis[hiredis]==5.2.1
 
 # Security
 argon2-cffi==23.1.0
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.5.0
 cryptography==43.0.3
-pyotp==2.9.0
-qrcode[pil]==8.0
+pyotp==2.10.0
+qrcode[pil]==8.2
 
 # Email
-resend==2.4.0
-jinja2==3.1.4
+resend==2.32.2
+jinja2==3.1.6
 
 # Validation
-pydantic==2.10.3
-pydantic-settings==2.6.1
-email-validator==2.2.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+email-validator==2.3.0
 
 # HTTP client
 httpx==0.28.1
@@ -36,7 +36,7 @@ structlog==24.4.0
 prometheus-fastapi-instrumentator==7.0.0
 
 # Rate limiting
-slowapi==0.1.9
+slowapi==0.1.10
 
 # Testing
 pytest==8.3.4
