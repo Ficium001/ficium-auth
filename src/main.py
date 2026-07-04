@@ -73,6 +73,24 @@ async def request_id_middleware(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def default_response_headers_middleware(request: Request, call_next):
+    """Auth responses (tokens, sessions, JWKS) must never be cached by an
+    intermediary or the browser unless a route explicitly opts in. Also
+    ensures JSON responses declare charset — closes DevTools Issues panel
+    warnings for missing cache-control / content-type charset."""
+    response = await call_next(request)
+
+    if not response.headers.get("cache-control"):
+        response.headers["Cache-Control"] = "no-store"
+
+    content_type = response.headers.get("content-type", "")
+    if content_type.startswith("application/json") and "charset" not in content_type:
+        response.headers["Content-Type"] = f"{content_type}; charset=utf-8"
+
+    return response
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     log.error("unhandled_exception", error=str(exc), path=request.url.path)
