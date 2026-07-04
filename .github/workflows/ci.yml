@@ -1,0 +1,89 @@
+name: CI
+
+# Validates every push and pull request: secret-scan → install → audit →
+# lint/type-check (advisory) → test → build.
+# This is the first CI gate for this repo — lint/type-check and
+# dependency audit run report-only until a baseline is triaged, so the
+# gate doesn't fail on pre-existing, unreviewed findings.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (full history for diff-aware scan)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+  quality:
+    name: Audit, lint, type-check & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: secrets
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps (cryptography, argon2)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential libffi-dev libssl-dev
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Dependency audit (pip-audit)
+        # Report-only for now: no triaged baseline yet.
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --desc
+        continue-on-error: true
+
+      - name: Lint (ruff)
+        # Report-only for now: no triaged baseline yet.
+        run: python -m ruff check src tests --no-cache
+        continue-on-error: true
+
+      - name: Type-check (mypy)
+        # Report-only for now: no triaged baseline yet.
+        run: python -m mypy src
+        continue-on-error: true
+
+      - name: Test (pytest)
+        run: python -m pytest -q
+
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t ficium-auth:ci .
