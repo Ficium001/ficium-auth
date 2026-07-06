@@ -10,7 +10,7 @@ psycopg2-binary==2.9.12
 sqlalchemy[asyncio]==2.0.51
 
 # Redis
-redis[hiredis]==5.2.1
+redis[hiredis]==8.0.1
 
 # Security
 argon2-cffi==23.1.0
