@@ -33,7 +33,7 @@ httpx==0.28.1
 
 # Observability
 structlog==26.1.0
-prometheus-fastapi-instrumentator==7.0.0
+prometheus-fastapi-instrumentator==8.0.2
 
 # Rate limiting
 slowapi==0.1.10
