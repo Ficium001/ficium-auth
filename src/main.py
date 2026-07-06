@@ -84,6 +84,9 @@ async def default_response_headers_middleware(request: Request, call_next):
     if not response.headers.get("cache-control"):
         response.headers["Cache-Control"] = "no-store"
 
+    # Prevent MIME sniffing on all auth responses.
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+
     content_type = response.headers.get("content-type", "")
     if content_type.startswith("application/json") and "charset" not in content_type:
         response.headers["Content-Type"] = f"{content_type}; charset=utf-8"
