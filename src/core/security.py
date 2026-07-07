@@ -126,13 +126,22 @@ def issue_access_token(
     return token, exp
 
 
-def verify_access_token(token: str) -> dict[str, Any]:
+def verify_access_token(token: str, ignore_exp: bool = False) -> dict[str, Any]:
+    """
+    Decode and verify an access token's signature/audience.
+    ignore_exp=True still requires a valid signature but tolerates an
+    expired `exp` claim — used by /logout so an expired-but-genuine
+    token can still identify the session to revoke.
+    """
+    options = {"verify_iss": False}
+    if ignore_exp:
+        options["verify_exp"] = False
     return jwt.decode(
         token,
         _jwt_verify_key(),
         algorithms=[_jwt_algorithm()],
         audience=settings.jwt_audience,
-        options={"verify_iss": False},
+        options=options,
     )
 
 

@@ -9,13 +9,14 @@ from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
+from jose import JWTError
 
 from ..core.database import db_dependency, SupabaseDB
 from ..core.config import settings
 from ..core.security import (
     hash_password, verify_password, validate_password_policy,
     PasswordPolicyError, issue_access_token, generate_secure_token,
-    hash_token, generate_refresh_token,
+    hash_token, generate_refresh_token, verify_access_token, get_token_from_header,
 )
 from ..core.redis import (
     check_rate_limit, is_locked_out, record_failed_login,
@@ -331,24 +332,43 @@ async def logout(
     request:  Request,
     response: Response,
     db:       SupabaseDB = Depends(db_dependency),
-    current:  AuthenticatedUser = Depends(get_current_user),
 ) -> dict:
+    """
+    Always clears the client's session, even if the access token has
+    already expired. An expired token still proves prior possession
+    (signature is checked), so it's enough to identify and revoke the
+    session — logout must never require a *currently valid* token,
+    or an expired session becomes impossible to explicitly sign out of.
+    """
     ip = get_client_ip(request)
-
-    await db.update_session(current.session_id, {
-        "is_active":    False,
-        "revoked_at":   datetime.now(timezone.utc).isoformat(),
-        "revoke_reason": "logout",
-    })
-    await remove_user_session(current.user_id, current.session_id)
     _clear_refresh_cookie(response)
 
-    await db.log_audit({
-        "user_id":    current.user_id,
-        "event_type": "logout",
-        "outcome":    "success",
-        "ip_address": ip,
-    })
+    token = get_token_from_header(request.headers.get("Authorization"))
+    if not token:
+        return {"message": "Signed out successfully."}
+
+    try:
+        claims = verify_access_token(token, ignore_exp=True)
+    except JWTError:
+        # Malformed/unsigned token — nothing valid to revoke.
+        return {"message": "Signed out successfully."}
+
+    user_id, session_id = claims.get("sub"), claims.get("session_id")
+    if user_id and session_id:
+        await db.update_session(session_id, {
+            "is_active":     False,
+            "revoked_at":    datetime.now(timezone.utc).isoformat(),
+            "revoke_reason": "logout",
+        })
+        await remove_user_session(user_id, session_id)
+
+        await db.log_audit({
+            "user_id":    user_id,
+            "event_type": "logout",
+            "outcome":    "success",
+            "ip_address": ip,
+        })
+
     return {"message": "Signed out successfully."}
 
 
