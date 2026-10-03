@@ -10,7 +10,6 @@ from jose import JWTError
 
 from ..core.security import verify_access_token, get_token_from_header
 from ..core.redis import is_token_blacklisted
-from ..core.config import settings
 
 security = HTTPBearer(auto_error=False)
 

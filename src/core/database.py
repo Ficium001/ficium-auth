@@ -6,8 +6,9 @@
 # =============================================================
 
 import httpx
-from typing import Any, Optional
+from typing import Optional
 from .config import settings
+from sqlalchemy.orm import DeclarativeBase
 
 SCHEMA = "auth_portal"
 BASE   = f"{settings.supabase_url}/rest/v1"
@@ -298,6 +299,5 @@ async def db_dependency():
 
 
 # ── Legacy Base for model imports (no-op) ────────────────────
-from sqlalchemy.orm import DeclarativeBase
 class Base(DeclarativeBase):
     pass

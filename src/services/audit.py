@@ -5,7 +5,6 @@
 
 import uuid
 from typing import Optional, Any
-from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -7,7 +7,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import Field, computed_field, field_validator
 from typing import Literal
-import secrets
 
 
 class Settings(BaseSettings):
@@ -157,12 +156,12 @@ class Settings(BaseSettings):
     log_format:       str  = "json"         # json | text
     metrics_enabled:  bool = True
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]  # documented pydantic v2 pattern
     @property
     def is_production(self) -> bool:
         return self.env == "production"
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]  # documented pydantic v2 pattern
     @property
     def is_development(self) -> bool:
         return self.env == "development"
@@ -176,4 +175,4 @@ class Settings(BaseSettings):
 
 
 # Singleton — loaded once at startup
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # every field comes from the environment
