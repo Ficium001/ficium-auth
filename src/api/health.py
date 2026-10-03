@@ -8,6 +8,7 @@ from ..core.database import check_db_health
 from ..core.redis import check_redis_health
 from ..core.config import settings
 from ..schemas.auth import HealthResponse
+from fastapi.responses import JSONResponse
 
 router = APIRouter(tags=["Health"])
 
@@ -29,12 +30,12 @@ async def liveness() -> dict:
     return {"status": "alive"}
 
 
-@router.get("/health/ready")
-async def readiness() -> dict:
+@router.get("/health/ready", response_model=None)
+async def readiness() -> dict | JSONResponse:
     """Kubernetes readiness probe — can we serve traffic?"""
     db_ok    = await check_db_health()
     redis_ok = await check_redis_health()
     if not db_ok or not redis_ok:
-        from fastapi import Response as FastAPIResponse
-        return FastAPIResponse(status_code=503, content={"status": "not ready"})
+        # JSONResponse, not Response: a plain Response cannot encode a dict body and raised (-> HTTP 500).
+        return JSONResponse(status_code=503, content={"status": "not ready"})
     return {"status": "ready"}

@@ -2,11 +2,8 @@
 # ficium-auth — Pydantic schemas (request/response)
 # =============================================================
 
-import uuid
-from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
-import re
 
 
 # ── Registration ──────────────────────────────────────────────

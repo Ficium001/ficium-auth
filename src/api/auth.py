@@ -3,9 +3,8 @@
 # =============================================================
 
 import uuid
-import secrets
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Literal, Optional, cast
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
@@ -21,20 +20,17 @@ from ..core.security import (
 from ..core.redis import (
     check_rate_limit, is_locked_out, record_failed_login,
     clear_failed_logins, add_user_session,
-    remove_user_session, get_user_session_ids, cache_set, cache_get,
-    RedisKeys,
+    remove_user_session, get_user_session_ids, cache_set, RedisKeys,
 )
 from ..schemas.auth import (
     RegisterRequest, RegisterResponse,
     LoginRequest, LoginResponse,
     ForgotPasswordRequest, ForgotPasswordResponse,
     ResetPasswordRequest, ChangePasswordRequest, ForceChangePasswordRequest, PasswordActionResponse,
-    VerifyEmailRequest, ResendVerificationRequest,
-    SessionListResponse, SessionInfo, MeResponse,
+    VerifyEmailRequest, SessionListResponse, SessionInfo, MeResponse,
 )
 from ..services.email import (
     send_verification_email, send_password_reset_email,
-    send_suspicious_login_alert, send_lockout_alert,
 )
 from ..middleware.auth_middleware import get_current_user, AuthenticatedUser, get_client_ip, get_user_agent
 
@@ -48,7 +44,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         value=token,
         httponly=settings.session_cookie_httponly,
         secure=settings.session_cookie_secure,
-        samesite=settings.session_cookie_samesite,
+        samesite=cast(Literal["lax", "strict", "none"], settings.session_cookie_samesite),
         # Only set Domain if explicitly configured — an unset/empty
         # Domain makes this a host-only cookie scoped to whatever host
         # actually issued it, which is always valid. A misconfigured

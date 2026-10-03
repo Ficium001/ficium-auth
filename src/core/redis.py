@@ -3,7 +3,7 @@
 # Sessions, rate limiting, lockouts, token blacklist, cache
 # =============================================================
 
-from typing import Any
+from typing import Any, cast
 import json
 
 import redis.asyncio as aioredis
@@ -191,7 +191,7 @@ async def remove_user_session(user_id: str, session_id: str) -> None:
 
 async def get_user_session_ids(user_id: str) -> set[str]:
     r = await get_redis()
-    return await r.smembers(RedisKeys.user_sessions(user_id))
+    return cast("set[str]", await r.smembers(RedisKeys.user_sessions(user_id)))
 
 
 # ── Generic cache ─────────────────────────────────────────────

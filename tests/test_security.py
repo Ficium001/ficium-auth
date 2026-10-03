@@ -13,8 +13,7 @@ from jose import jwt
 
 from src.core import security
 from src.core.security import (
-    hash_password, verify_password, password_needs_rehash,
-    validate_password_policy, PasswordPolicyError,
+    hash_password, verify_password, validate_password_policy, PasswordPolicyError,
     issue_access_token, verify_access_token, get_token_from_header,
     generate_secure_token, hash_token, verify_token_hash,
     generate_refresh_token, generate_backup_codes, constant_time_compare,

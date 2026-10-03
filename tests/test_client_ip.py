@@ -31,7 +31,7 @@ def test_multiple_hops_takes_rightmost():
 
 def test_spoofed_left_entry_ignored():
     # Attacker tries to inject a fake IP as the first entry to evade lockout.
-    r = _req({"X-Forwarded-For": "66.66.66.66"}, peer="203.0.113.1")
+    _ = _req({"X-Forwarded-For": "66.66.66.66"}, peer="203.0.113.1")
     # Single entry → that's the trusted rightmost; but multi-entry proves it:
     r2 = _req({"X-Forwarded-For": "66.66.66.66, 203.0.113.1"})
     assert get_client_ip(r2) == "203.0.113.1"  # NOT the spoofed 66.66.66.66

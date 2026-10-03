@@ -10,7 +10,7 @@ from io import BytesIO
 import base64
 
 from ..core.config import settings
-from ..core.security import generate_backup_codes, hash_token, verify_token_hash
+from ..core.security import generate_backup_codes, verify_token_hash
 
 
 def generate_totp_secret() -> str:
