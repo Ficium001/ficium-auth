@@ -23,14 +23,13 @@ from ..core.redis import (
     remove_user_session, get_user_session_ids, cache_set, RedisKeys,
 )
 from ..schemas.auth import (
-    RegisterRequest, RegisterResponse,
     LoginRequest, LoginResponse,
     ForgotPasswordRequest, ForgotPasswordResponse,
     ResetPasswordRequest, ChangePasswordRequest, ForceChangePasswordRequest, PasswordActionResponse,
     VerifyEmailRequest, SessionListResponse, SessionInfo, MeResponse,
 )
 from ..services.email import (
-    send_verification_email, send_password_reset_email,
+    send_password_reset_email,
 )
 from ..middleware.auth_middleware import get_current_user, AuthenticatedUser, get_client_ip, get_user_agent
 
@@ -63,108 +62,12 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
-# ── Register ──────────────────────────────────────────────────
-@router.post("/register", response_model=RegisterResponse, status_code=201)
-async def register(
-    body:    RegisterRequest,
-    request: Request,
-    db:      SupabaseDB = Depends(db_dependency),
-) -> RegisterResponse:
-    ip = get_client_ip(request)
-
-    allowed, _ = await check_rate_limit(f"register:{ip}", limit=3, window=3600)
-    if not allowed:
-        raise HTTPException(429, "Too many registration attempts.")
-
-    try:
-        validate_password_policy(body.password)
-    except PasswordPolicyError as e:
-        raise HTTPException(400, str(e))
-
-    existing = await db.get_user_by_email(body.email)
-    if existing:
-        return RegisterResponse(
-            user_id=str(uuid.uuid4()),
-            needs_email_verification=True,
-            message="If that email is not registered, you'll receive a verification email.",
-        )
-
-    pw_hash        = hash_password(body.password)
-    institution_id = await _create_institution(body)
-
-    user = await db.create_user({
-        "institution_id": str(institution_id),
-        "email":          body.email,
-        "email_verified": False,
-        "password_hash":  pw_hash,
-        "role":           "admin",
-        "is_active":      True,
-    })
-
-    raw_token  = generate_secure_token()
-    token_hash = hash_token(raw_token)
-    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=settings.email_verify_ttl)).isoformat()
-
-    await db.create_email_verification_token({
-        "user_id":    user["id"],
-        "token_hash": token_hash,
-        "expires_at": expires_at,
-    })
-
-    verify_url = f"{settings.portal_public_url}/verify-email?token={raw_token}"
-    try:
-        await send_verification_email(body.email, verify_url)
-    except Exception as e:
-        log.error("verification_email_failed", error=str(e))
-
-    await db.log_audit({
-        "user_id":        user["id"],
-        "institution_id": str(institution_id),
-        "event_type":     "register.success",
-        "outcome":        "success",
-        "ip_address":     ip,
-    })
-
-    return RegisterResponse(
-        user_id=str(user["id"]),
-        needs_email_verification=True,
-        message="Account created. Check your email to verify.",
-    )
-
-
-async def _create_institution(body: RegisterRequest) -> uuid.UUID:
-    import httpx
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{settings.supabase_url}/rest/v1/institutions",
-            headers={
-                "apikey":          settings.supabase_service_key,
-                "Authorization":   f"Bearer {settings.supabase_service_key}",
-                "Content-Type":    "application/json",
-                "Accept":          "application/json",
-                "Prefer":          "return=representation",
-                "Accept-Profile":  "institution",
-                "Content-Profile": "institution",
-            },
-            json={
-                "name":                  body.institution_name,
-                "legal_name":            body.institution_name,
-                "institution_type":      body.institution_type,
-                "reg_number":            body.reg_number,
-                "regulator":             body.regulatory_body,
-                "country":               body.country,
-                "website":               body.website,
-                "deployment_model":      "saas",
-                "onboarding_stage":      "registered",
-                "compliance_status":     "not_submitted",
-                "approved":              False,
-                "primary_contact_email": body.email,
-                "primary_contact_name":  f"{body.first_name} {body.last_name}",
-                "primary_contact_phone": body.phone,
-            },
-        )
-        resp.raise_for_status()
-        return uuid.UUID(resp.json()[0]["id"])
+# ── Register (removed 2026-10-21) ─────────────────────────────
+# Self-registration lives in portal-api (POST /auth/register): one database
+# transaction creates the institution, this service's login row and the
+# primary admin. The endpoint that was here posted to a table name that does
+# not exist (institution/institutions) and never created the member, so it
+# could not have worked; it is removed rather than left as a public surface.
 
 
 # ── Login ─────────────────────────────────────────────────────
