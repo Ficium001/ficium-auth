@@ -7,32 +7,6 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ── Registration ──────────────────────────────────────────────
-class RegisterRequest(BaseModel):
-    email:            EmailStr
-    password:         str       = Field(..., min_length=12, max_length=128)
-    first_name:       str       = Field(..., min_length=1, max_length=60)
-    last_name:        str       = Field(..., min_length=1, max_length=60)
-    institution_name: str       = Field(..., min_length=2, max_length=150)
-    institution_type: str       = Field(..., pattern="^(bank|fintech|micro_credit|insurance|investment_firm|other)$")
-    reg_number:       Optional[str] = Field(None, max_length=40)
-    regulatory_body:  Optional[str] = Field(None, max_length=100)
-    phone:            Optional[str] = Field(None, max_length=20)
-    country:          str       = Field(..., min_length=2, max_length=3)
-    website:          Optional[str] = Field(None, max_length=255)
-
-    @field_validator("email")
-    @classmethod
-    def normalise_email(cls, v: str) -> str:
-        return v.strip().lower()
-
-
-class RegisterResponse(BaseModel):
-    user_id:                  str
-    needs_email_verification: bool
-    message:                  str
-
-
-# ── Login ─────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
     username:    str  = Field(..., min_length=1, max_length=60)
     password:    str  = Field(..., min_length=1, max_length=128)
