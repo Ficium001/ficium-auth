@@ -2,19 +2,20 @@
 # ficium-auth — FastAPI application entry point
 # =============================================================
 
-import structlog
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from redis.exceptions import RedisError
 
-from .core.config import settings
-from .core.redis import get_redis, close_redis
 from .api.auth import router as auth_router
 from .api.health import router as health_router
 from .api.jwks import router as jwks_router
+from .core.config import settings
+from .core.redis import close_redis, get_redis
 
 structlog.configure(
     processors=[
@@ -92,6 +93,21 @@ async def default_response_headers_middleware(request: Request, call_next):
         response.headers["Content-Type"] = f"{content_type}; charset=utf-8"
 
     return response
+
+
+@app.exception_handler(RedisError)
+async def redis_unavailable_handler(request: Request, exc: RedisError):
+    # Specific handlers run INSIDE the CORS middleware, so the browser gets a
+    # readable 503 instead of a misleading "blocked by CORS" (the catch-all
+    # Exception handler below runs outside it). Login itself degrades
+    # gracefully (core/redis.py); this covers MFA, revocation, refresh.
+    log.error("redis_unavailable", error=str(exc), path=request.url.path)
+    return JSONResponse(
+        status_code=503,
+        content={"error": "temporarily_unavailable",
+                 "message": "Sign-in is temporarily unavailable. Please try again in a minute."},
+        headers={"Retry-After": "30"},
+    )
 
 
 @app.exception_handler(Exception)
