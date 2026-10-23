@@ -3,13 +3,15 @@
 # Sessions, rate limiting, lockouts, token blacklist, cache
 # =============================================================
 
-from typing import Any, cast
 import json
+import time
+from typing import Any, cast
 
 import redis.asyncio as aioredis
+import structlog
+from redis.exceptions import RedisError
 
 from .config import settings
-
 
 # ── Connection pool ───────────────────────────────────────────
 _pool: aioredis.Redis | None = None
@@ -94,6 +96,41 @@ class RedisKeys:
         return f"rl:{key}"
 
 
+# ── Degraded mode (Redis unreachable) ─────────────────────────
+# Rate limiting and lockouts must not take login down when Redis is
+# unreachable (2026-10-23: after a Railway outage every sign-in failed). They
+# fall back to a per-instance in-memory counter, so brute-force protection
+# stays ON (per instance instead of shared) and each degraded call is logged.
+# Token revocation checks do NOT degrade: they keep failing closed.
+# Sessions are stored in Postgres, not here.
+log = structlog.get_logger()
+_MEM: dict[str, tuple[int, float]] = {}   # key -> (count, expires_at)
+_MEM_MAX_KEYS = 50_000
+
+
+def _degraded(op: str, exc: Exception) -> None:
+    log.warning("redis_degraded", op=op, error=str(exc))
+
+
+def _mem_incr(key: str, window: int) -> int:
+    now = time.monotonic()
+    if len(_MEM) > _MEM_MAX_KEYS:            # bound memory: drop expired, then oldest
+        for k in [k for k, (_, exp) in _MEM.items() if exp <= now]:
+            _MEM.pop(k, None)
+        while len(_MEM) > _MEM_MAX_KEYS:
+            _MEM.pop(next(iter(_MEM)))
+    count, exp = _MEM.get(key, (0, now + window))
+    if exp <= now:
+        count, exp = 0, now + window
+    _MEM[key] = (count + 1, exp)
+    return count + 1
+
+
+def _mem_get(key: str) -> int:
+    count, exp = _MEM.get(key, (0, 0.0))
+    return count if exp > time.monotonic() else 0
+
+
 # ── Rate limiting ─────────────────────────────────────────────
 async def check_rate_limit(
     key: str,
@@ -101,16 +138,18 @@ async def check_rate_limit(
     window: int,
 ) -> tuple[bool, int]:
     """
-    Sliding window rate limiter.
-    Returns (allowed, remaining_attempts).
+    Fixed-window rate limiter. Returns (allowed, remaining_attempts).
+    Falls back to a per-instance counter if Redis is unreachable.
     """
-    r = await get_redis()
     redis_key = RedisKeys.rate_limit(key)
-
-    count = await r.incr(redis_key)
-    if count == 1:
-        await r.expire(redis_key, window)
-
+    try:
+        r = await get_redis()
+        count = int(await r.incr(redis_key))
+        if count == 1:
+            await r.expire(redis_key, window)
+    except RedisError as exc:
+        _degraded("check_rate_limit", exc)
+        count = _mem_incr(redis_key, window)
     allowed = count <= limit
     remaining = max(0, limit - count)
     return allowed, remaining
@@ -118,51 +157,54 @@ async def check_rate_limit(
 
 # ── Login attempt tracking ────────────────────────────────────
 async def record_failed_login(ip: str, user_id: str | None = None) -> int:
-    """Record a failed login. Returns total failure count."""
-    r = await get_redis()
-
-    # Per-IP counter
+    """Record a failed login. Returns the per-IP failure count."""
     ip_key = RedisKeys.login_attempts(ip)
-    ip_count = await r.incr(ip_key)
-    if ip_count == 1:
-        await r.expire(ip_key, settings.rate_limit_login_window * 10)
-
-    # Per-user counter (if we know the user)
-    if user_id:
-        user_key = f"user_login_fails:{user_id}"
-        await r.incr(user_key)
-        await r.expire(user_key, settings.rate_limit_login_window * 10)
-
+    window = settings.rate_limit_login_window * 10
+    try:
+        r = await get_redis()
+        ip_count = int(await r.incr(ip_key))
+        if ip_count == 1:
+            await r.expire(ip_key, window)
+        if user_id:
+            user_key = f"user_login_fails:{user_id}"
+            await r.incr(user_key)
+            await r.expire(user_key, window)
+    except RedisError as exc:
+        _degraded("record_failed_login", exc)
+        ip_count = _mem_incr(ip_key, window)
     return ip_count
 
 
 async def is_locked_out(ip: str, user_id: str | None = None) -> bool:
     """Check if IP or user is currently locked out."""
-    r = await get_redis()
-
-    if await r.exists(RedisKeys.lockout(ip)):
-        return True
-
-    if user_id and await r.exists(RedisKeys.user_lockout(user_id)):
-        return True
-
-    # Check attempt count
-    ip_count = int(await r.get(RedisKeys.login_attempts(ip)) or 0)
-    if ip_count >= settings.lockout_threshold:
-        await r.setex(RedisKeys.lockout(ip), settings.lockout_duration, "1")
-        return True
-
-    return False
+    try:
+        r = await get_redis()
+        if await r.exists(RedisKeys.lockout(ip)):
+            return True
+        if user_id and await r.exists(RedisKeys.user_lockout(user_id)):
+            return True
+        ip_count = int(await r.get(RedisKeys.login_attempts(ip)) or 0)
+        if ip_count >= settings.lockout_threshold:
+            await r.setex(RedisKeys.lockout(ip), settings.lockout_duration, "1")
+            return True
+        return False
+    except RedisError as exc:
+        _degraded("is_locked_out", exc)
+        return _mem_get(RedisKeys.login_attempts(ip)) >= settings.lockout_threshold
 
 
 async def clear_failed_logins(ip: str, user_id: str | None = None) -> None:
     """Clear failed login counters on successful login."""
-    r = await get_redis()
-    await r.delete(RedisKeys.login_attempts(ip))
-    await r.delete(RedisKeys.lockout(ip))
-    if user_id:
-        await r.delete(f"user_login_fails:{user_id}")
-        await r.delete(RedisKeys.user_lockout(user_id))
+    _MEM.pop(RedisKeys.login_attempts(ip), None)
+    try:
+        r = await get_redis()
+        await r.delete(RedisKeys.login_attempts(ip))
+        await r.delete(RedisKeys.lockout(ip))
+        if user_id:
+            await r.delete(f"user_login_fails:{user_id}")
+            await r.delete(RedisKeys.user_lockout(user_id))
+    except RedisError as exc:
+        _degraded("clear_failed_logins", exc)
 
 
 # ── Token blacklist ───────────────────────────────────────────
@@ -180,8 +222,13 @@ async def is_token_blacklisted(jti: str) -> bool:
 
 # ── Session tracking (user → session list) ───────────────────
 async def add_user_session(user_id: str, session_id: str) -> None:
-    r = await get_redis()
-    await r.sadd(RedisKeys.user_sessions(user_id), session_id)
+    """Index a session for 'sign out everywhere'. Best effort: the session
+    itself is in Postgres, so an unreachable Redis must not block sign-in."""
+    try:
+        r = await get_redis()
+        await r.sadd(RedisKeys.user_sessions(user_id), session_id)
+    except RedisError as exc:
+        _degraded("add_user_session", exc)
 
 
 async def remove_user_session(user_id: str, session_id: str) -> None:
