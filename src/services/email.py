@@ -90,7 +90,10 @@ _LOCKOUT_ALERT_TEMPLATE = """
 </body></html>
 """
 
-_jinja = Environment(loader=BaseLoader())
+# autoescape: device (User-Agent), IP and other values are attacker-controlled;
+# unescaped they let a login with stolen credentials plant HTML in the victim's
+# genuine security email (security audit 2026-10-24).
+_jinja = Environment(loader=BaseLoader(), autoescape=True)
 
 
 def _render(template: str, **ctx) -> str:
