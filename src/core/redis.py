@@ -76,6 +76,14 @@ class RedisKeys:
         return f"mfa_challenge:{challenge_id}"
 
     @staticmethod
+    def mfa_pending(user_id: str) -> str:
+        return f"mfa_pending:{user_id}"
+
+    @staticmethod
+    def mfa_used_code(user_id: str, code: str) -> str:
+        return f"mfa_used:{user_id}:{code}"
+
+    @staticmethod
     def token_blacklist(jti: str) -> str:
         return f"blacklist:{jti}"
 

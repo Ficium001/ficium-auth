@@ -29,10 +29,15 @@ class LoginResponse(BaseModel):
 
 # ── MFA ───────────────────────────────────────────────────────
 class MFAEnrolResponse(BaseModel):
-    secret:       str
-    qr_code_uri:  str
+    secret:       str            # for manual entry if the QR code can't be scanned
+    qr_code_uri:  str            # otpauth:// URI
+    qr_code_svg:  str            # base64 SVG of the same URI
+    expires_in:   int            # seconds left to confirm with a code
+
+
+class MFAEnrolConfirmResponse(BaseModel):
     backup_codes: list[str]
-    message:      str = "Save these backup codes securely. They will not be shown again."
+    message:      str = "Save these backup codes securely. They will not be shown again. Sign in again to use MFA."
 
 
 class MFAVerifyEnrolRequest(BaseModel):
@@ -40,9 +45,9 @@ class MFAVerifyEnrolRequest(BaseModel):
 
 
 class MFAVerifyRequest(BaseModel):
-    mfa_token: str
-    totp_code: Optional[str] = Field(None, min_length=6, max_length=6)
-    backup_code: Optional[str] = Field(None)
+    mfa_token:   str           = Field(..., min_length=10, max_length=128)
+    totp_code:   Optional[str] = Field(None, min_length=6, max_length=6, pattern="^[0-9]{6}$")
+    backup_code: Optional[str] = Field(None, min_length=8, max_length=20)
 
 
 class MFAVerifyResponse(BaseModel):
@@ -52,8 +57,8 @@ class MFAVerifyResponse(BaseModel):
 
 
 class MFADisableRequest(BaseModel):
-    password:  str
-    totp_code: str = Field(..., min_length=6, max_length=6)
+    password:  str = Field(..., min_length=1, max_length=128)
+    totp_code: str = Field(..., min_length=6, max_length=6, pattern="^[0-9]{6}$")
 
 
 # ── Password management ───────────────────────────────────────
