@@ -11,6 +11,7 @@ ficium-auth owns the `auth_portal` schema. All migrations run in the Supabase SQ
 | File | Purpose |
 |------|---------|
 | `001_auth_portal_schema.sql` | Creates the full `auth_portal` schema — all tables, indexes, grants |
+| `002_session_mfa_verified.sql` | `auth_sessions.mfa_verified` — MFA proof survives refresh rotation. **Applied** 2026-10-26; must exist before the code that writes it |
 
 ---
 

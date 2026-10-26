@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     mfa_backup_codes:     int  = 10
     mfa_totp_window:      int  = 1           # ±1 time step tolerance
     mfa_required:         bool = False       # set True to enforce for all
+    # Fernet key (urlsafe base64, 32 bytes) used to encrypt TOTP secrets at rest.
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Empty => MFA enrolment/verification answer 503 (fail closed); password login is unaffected.
+    mfa_encryption_key:   str  = ""
 
     # ── Email ─────────────────────────────────────────────────
     smtp_provider:    str = "resend"

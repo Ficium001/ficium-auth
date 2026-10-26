@@ -6,6 +6,7 @@
 # =============================================================
 
 import httpx
+from datetime import datetime, timezone
 from typing import Optional
 from .config import settings
 from sqlalchemy.orm import DeclarativeBase
@@ -131,6 +132,45 @@ class SupabaseDB:
             headers=_headers(),
             params=params,
             json={"is_active": False, "revoke_reason": "logout_all"},
+        )
+        r.raise_for_status()
+
+    # ── mfa_backup_codes ──────────────────────────────────────
+
+    async def replace_backup_codes(self, user_id: str, hashes: list[str]) -> None:
+        await self.delete_backup_codes(user_id)
+        r = await self._client.post(
+            f"{BASE}/mfa_backup_codes",
+            headers=_headers(),
+            json=[{"user_id": user_id, "code_hash": h} for h in hashes],
+        )
+        r.raise_for_status()
+
+    async def get_unused_backup_codes(self, user_id: str) -> list[dict]:
+        r = await self._client.get(
+            f"{BASE}/mfa_backup_codes",
+            headers=_headers(),
+            params={"user_id": f"eq.{user_id}", "used_at": "is.null", "select": "id,code_hash"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+    async def consume_backup_code(self, code_id: str) -> bool:
+        """Mark a code used; True only for the caller that actually flipped it (no double use)."""
+        r = await self._client.patch(
+            f"{BASE}/mfa_backup_codes",
+            headers=_headers("return=representation"),
+            params={"id": f"eq.{code_id}", "used_at": "is.null"},
+            json={"used_at": datetime.now(timezone.utc).isoformat()},
+        )
+        r.raise_for_status()
+        return len(r.json()) == 1
+
+    async def delete_backup_codes(self, user_id: str) -> None:
+        r = await self._client.delete(
+            f"{BASE}/mfa_backup_codes",
+            headers=_headers(),
+            params={"user_id": f"eq.{user_id}"},
         )
         r.raise_for_status()
 

@@ -62,6 +62,88 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
+def amr_for(mfa_verified: bool, method: str = "otp") -> list[str]:
+    """RFC 8176 authentication methods. 'mfa' is what relying parties should check."""
+    return ["pwd", method, "mfa"] if mfa_verified else ["pwd"]
+
+
+async def start_session(
+    db: SupabaseDB, user: dict, request: Request, response: Response,
+    mfa_verified: bool, method: str = "otp",
+) -> LoginResponse:
+    """Create a session + refresh cookie and issue an access token. Shared by
+    password login (no MFA) and /auth/mfa/verify (MFA completed)."""
+    ip         = get_client_ip(request)
+    user_agent = get_user_agent(request)
+    session_id         = str(uuid.uuid4())
+    raw_rt, rt_hash    = generate_refresh_token()
+
+    # Fetch module permissions from institution.group via custom_group_id
+    module_permissions = await db.get_member_module_permissions(
+        user_id=user["id"],
+        institution_id=user["institution_id"],
+    )
+
+    access_token, exp  = issue_access_token(
+        user_id=user["id"],
+        institution_id=user["institution_id"],
+        role=user["role"],
+        session_id=session_id,
+        extra_claims={
+            "email":              user["email"],
+            "module_permissions": module_permissions,
+            "amr":                amr_for(mfa_verified, method),
+        },
+    )
+
+    # Enforce concurrent session limit
+    session_ids = await get_user_session_ids(user["id"])
+    if len(session_ids) >= settings.session_max_concurrent:
+        oldest = next(iter(session_ids))
+        await remove_user_session(user["id"], oldest)
+        await db.update_session(oldest, {
+            "is_active":    False,
+            "revoked_at":   datetime.now(timezone.utc).isoformat(),
+            "revoke_reason": "session_limit",
+        })
+
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=settings.jwt_refresh_ttl)).isoformat()
+    await db.create_session({
+        "id":                 session_id,
+        "user_id":            user["id"],
+        "refresh_token_hash": rt_hash,
+        "ip_address":         ip,
+        "user_agent":         user_agent[:500] if user_agent else None,
+        "is_active":          True,
+        "expires_at":         expires_at,
+        "mfa_verified":       mfa_verified,
+    })
+
+    await add_user_session(user["id"], session_id)
+
+    await db.update_user(user["id"], {
+        "last_login_at": datetime.now(timezone.utc).isoformat(),
+        "last_login_ip": ip,
+    })
+
+    _set_refresh_cookie(response, raw_rt)
+
+    await db.log_audit({
+        "user_id":        user["id"],
+        "institution_id": user["institution_id"],
+        "event_type":     "login.success",
+        "outcome":        "success",
+        "ip_address":     ip,
+        "event_metadata": {"session_id": session_id, "mfa": mfa_verified},
+    })
+
+    return LoginResponse(
+        access_token=access_token,
+        expires_in=settings.jwt_access_ttl,
+        must_change_password=bool(user.get("must_change_password", False)),
+    )
+
+
 # ── Register (removed 2026-10-21) ─────────────────────────────
 # Self-registration lives in portal-api (POST /auth/register): one database
 # transaction creates the institution, this service's login row and the
@@ -79,7 +161,6 @@ async def login(
     db:       SupabaseDB = Depends(db_dependency),
 ) -> LoginResponse:
     ip         = get_client_ip(request)
-    user_agent = get_user_agent(request)
 
     allowed, _ = await check_rate_limit(
         f"login:{ip}", settings.rate_limit_login, settings.rate_limit_login_window
@@ -120,71 +201,7 @@ async def login(
         )
         return LoginResponse(mfa_required=True, mfa_token=challenge_id)
 
-    session_id         = str(uuid.uuid4())
-    raw_rt, rt_hash    = generate_refresh_token()
-
-    # Fetch module permissions from institution.group via custom_group_id
-    module_permissions = await db.get_member_module_permissions(
-        user_id=user["id"],
-        institution_id=user["institution_id"],
-    )
-
-    access_token, exp  = issue_access_token(
-        user_id=user["id"],
-        institution_id=user["institution_id"],
-        role=user["role"],
-        session_id=session_id,
-        extra_claims={
-            "email":              user["email"],
-            "module_permissions": module_permissions,
-        },
-    )
-
-    # Enforce concurrent session limit
-    session_ids = await get_user_session_ids(user["id"])
-    if len(session_ids) >= settings.session_max_concurrent:
-        oldest = next(iter(session_ids))
-        await remove_user_session(user["id"], oldest)
-        await db.update_session(oldest, {
-            "is_active":    False,
-            "revoked_at":   datetime.now(timezone.utc).isoformat(),
-            "revoke_reason": "session_limit",
-        })
-
-    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=settings.jwt_refresh_ttl)).isoformat()
-    await db.create_session({
-        "id":                 session_id,
-        "user_id":            user["id"],
-        "refresh_token_hash": rt_hash,
-        "ip_address":         ip,
-        "user_agent":         user_agent[:500] if user_agent else None,
-        "is_active":          True,
-        "expires_at":         expires_at,
-    })
-
-    await add_user_session(user["id"], session_id)
-
-    await db.update_user(user["id"], {
-        "last_login_at": datetime.now(timezone.utc).isoformat(),
-        "last_login_ip": ip,
-    })
-
-    _set_refresh_cookie(response, raw_rt)
-
-    await db.log_audit({
-        "user_id":        user["id"],
-        "institution_id": user["institution_id"],
-        "event_type":     "login.success",
-        "outcome":        "success",
-        "ip_address":     ip,
-        "event_metadata": {"session_id": session_id},
-    })
-
-    return LoginResponse(
-        access_token=access_token,
-        expires_in=settings.jwt_access_ttl,
-        must_change_password=bool(user.get("must_change_password", False)),
-    )
+    return await start_session(db, user, request, response, mfa_verified=False)
 
 
 # ── Forced password change (after admin reset) ────────────────
@@ -308,6 +325,7 @@ async def refresh_token(
     })
     await remove_user_session(user["id"], session["id"])
 
+    mfa_verified = bool(session.get("mfa_verified", False))
     await db.create_session({
         "id":                 new_session_id,
         "user_id":            user["id"],
@@ -315,6 +333,7 @@ async def refresh_token(
         "ip_address":         get_client_ip(request),
         "is_active":          True,
         "expires_at":         new_expires,
+        "mfa_verified":       mfa_verified,   # MFA proof survives rotation, never upgrades
     })
     await add_user_session(user["id"], new_session_id)
 
@@ -332,6 +351,7 @@ async def refresh_token(
         extra_claims={
             "email":              user["email"],
             "module_permissions": module_permissions,
+            "amr":                amr_for(mfa_verified),
         },
     )
     _set_refresh_cookie(response, new_raw_rt)

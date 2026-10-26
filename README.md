@@ -30,6 +30,10 @@ Built with FastAPI. Deployed on Railway (`ficium-auth-production.up.railway.app`
 | `POST` | `/auth/password/force-change` | Clear `must_change_password` flag |
 | `POST` | `/auth/password/reset/request` | Send password reset email |
 | `POST` | `/auth/password/reset/confirm` | Confirm reset with token |
+| `POST` | `/auth/mfa/enrol` | Start TOTP setup (signed in) → secret + QR, pending 10 min |
+| `POST` | `/auth/mfa/verify-enrolment` | Confirm with a code → MFA on, 10 backup codes shown once, other sessions signed out |
+| `POST` | `/auth/mfa/verify` | Complete a login that returned `mfa_required` (TOTP or one backup code) |
+| `POST` | `/auth/mfa/disable` | Password + current code, from an MFA session only |
 | `GET`  | `/.well-known/jwks.json` | RS256 public key (JWKS format) |
 | `GET`  | `/health` | Liveness — DB + Redis checks |
 
@@ -52,11 +56,14 @@ RS256-signed JWTs with `kid: ficium-auth-rs256-v1`:
   "email": "user@institution.mu",
   "session_id": "<uuid>",
   "deployment": "saas",
+  "amr": ["pwd"] | ["pwd", "otp", "mfa"] | ["pwd", "backup", "mfa"],
   "iat": 0,
   "exp": 0,
   "jti": "…"
 }
 ```
+
+`amr` (RFC 8176) says how the user signed in; a relying party that needs MFA checks for `"mfa"`. It is carried through refresh (from `auth_sessions.mfa_verified`) and never added by it.
 
 `aud: authenticated` and `role: authenticated` are deliberate — they keep tokens Supabase-compatible so `auth.uid()` resolves inside RLS policies downstream (via `request.jwt.claims` GUC set by ficium-portal-api).
 
