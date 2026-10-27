@@ -109,6 +109,37 @@ async def send_verification_email(to: str, verify_url: str) -> None:
     })
 
 
+_INVITE_TEMPLATE = """
+<!DOCTYPE html><html><body style="font-family:Inter Tight,sans-serif;color:#0A0A1A;background:#FAF7F0;padding:40px 20px;">
+<div style="max-width:480px;margin:0 auto;background:white;border-radius:12px;padding:40px;border:1px solid rgba(10,10,26,0.08);">
+  <div style="font-size:20px;font-weight:700;margin-bottom:8px;">You've been invited to Ficium Admin</div>
+  <p style="color:#6B6B85;font-size:14px;line-height:1.6;">
+    {{ inviter }} added you as Ficium staff. Your username is <strong>{{ username }}</strong>.
+    Set a password with the button below; you'll then set up an authenticator app.
+    This link expires in <strong>24 hours</strong> and can only be used once.
+  </p>
+  <a href="{{ url }}" style="display:inline-block;background:#2A1FE6;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;margin:24px 0;">
+    Set your password
+  </a>
+  <p style="color:#6B6B85;font-size:13px;">
+    Not expecting this? <a href="mailto:security@ficium.net" style="color:#2A1FE6;">Tell security</a> and don't click the link.
+  </p>
+  <hr style="border:none;border-top:1px solid rgba(10,10,26,0.07);margin:24px 0;">
+  <p style="color:#6B6B85;font-size:11px;">Ficium Ltd · Port Louis, Mauritius</p>
+</div>
+</body></html>
+"""
+
+
+async def send_staff_invite_email(to: str, url: str, username: str, inviter: str) -> None:
+    resend.Emails.send({
+        "from":    f"{settings.email_from_name} <{settings.email_from}>",
+        "to":      [to],
+        "subject": "You've been invited to Ficium Admin",
+        "html":    _render(_INVITE_TEMPLATE, url=url, username=username, inviter=inviter),
+    })
+
+
 async def send_password_reset_email(to: str, reset_url: str, product: str = "Ficium Portal") -> None:
     resend.Emails.send({
         "from":    f"{settings.email_from_name} <{settings.email_from}>",
