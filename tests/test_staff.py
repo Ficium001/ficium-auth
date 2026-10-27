@@ -96,3 +96,11 @@ def test_reports_but_survives_an_email_failure(env, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(staff_api, "send_staff_invite_email", boom)
     r = post(c, tok())
     assert r.status_code == 200 and r.json()["email_sent"] is False and "secret-detail" not in r.text
+
+
+def test_resend_by_email_alone_and_create_needs_a_username(env) -> None:
+    _, mails, c = env
+    assert c.post("/auth/staff/provision", headers={"Authorization": f"Bearer {tok()}"}, json={"email": "ana@ficium.net"}).status_code == 422
+    post(c, tok())
+    r = c.post("/auth/staff/provision", headers={"Authorization": f"Bearer {tok()}"}, json={"email": "ana@ficium.net"})
+    assert r.json()["status"] == "resent" and mails[-1][2] == "ana"
