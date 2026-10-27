@@ -447,12 +447,22 @@ async def reset_password(
         raise HTTPException(400, str(e))
 
     new_hash = hash_password(body.new_password)
+    # Single use first: a token can never set two passwords, even under a race.
+    if not await db.mark_reset_token_used(token["id"]):
+        raise HTTPException(400, "Invalid or expired reset token.")
     await db.update_user(token["user_id"], {
         "password_hash":        new_hash,
         "password_changed_at":  datetime.now(timezone.utc).isoformat(),
-        "force_password_reset": False,
+        "must_change_password": False,   # was "force_password_reset": no such column, every reset 500'd
+        "updated_at":           datetime.now(timezone.utc).isoformat(),
     })
-    await db.mark_reset_token_used(token["id"])
+    # Whoever knew the old password must not stay signed in.
+    await db.revoke_all_user_sessions(token["user_id"])
+    await db.log_audit({
+        "user_id":    token["user_id"],
+        "event_type": "password.reset",
+        "outcome":    "success",
+    })
 
     return PasswordActionResponse(message="Password reset successfully.")
 
