@@ -41,7 +41,7 @@ def _csv(v: str) -> list[str]:
 
 class ProvisionRequest(BaseModel):
     email:    str = Field(..., min_length=5, max_length=254)
-    username: str = Field(..., min_length=3, max_length=40)
+    username: str | None = Field(None, min_length=3, max_length=40)   # required to create; optional to re-send
 
     @field_validator("email")
     @classmethod
@@ -53,7 +53,9 @@ class ProvisionRequest(BaseModel):
 
     @field_validator("username")
     @classmethod
-    def _username(cls, v: str) -> str:
+    def _username(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         v = v.strip().lower()
         if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,39}", v):
             raise ValueError("3-40 characters: letters, digits, dot, dash, underscore")
@@ -96,15 +98,17 @@ async def provision(
         raise HTTPException(400, "Staff must use a Ficium email address.")
 
     existing = await db.get_user_by_email(body.email)
-    by_name = await db.get_user_by_username(body.username)
+    by_name = await db.get_user_by_username(body.username) if body.username else None
     if existing:
         # Only a not-yet-activated staff invite may be re-sent; never touch any other account.
         if existing.get("password_hash") != UNUSABLE or str(existing.get("institution_id")) != settings.platform_institution_id:
             raise HTTPException(409, "That email already has an account.")
-        if existing["username"] != body.username:
+        if body.username and existing["username"] != body.username:
             raise HTTPException(409, f"That email was invited as '{existing['username']}'.")
         user, status = existing, "resent"
     else:
+        if not body.username:
+            raise HTTPException(422, "A username is required for a new invitation.")
         if by_name:
             raise HTTPException(409, "That username is taken.")
         user = await db.create_user({
@@ -125,7 +129,7 @@ async def provision(
     try:
         await send_staff_invite_email(
             body.email, f"{settings.admin_public_url.rstrip('/')}/reset-password?token={raw}",
-            body.username, inviter=str(caller.get("email") or "A Ficium administrator"))
+            user["username"], inviter=str(caller.get("email") or "A Ficium administrator"))
     except Exception as exc:   # noqa: BLE001 — provider errors vary; never leak them, report the fact
         email_sent = False
         log.error("staff_invite_email_failed", error=str(exc))
