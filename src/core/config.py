@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     # purposes and conflating them previously broke email links
     # whenever the cookie domain was correctly left unset.
     portal_public_url:         str = "https://ficium-portal.vercel.app"
+    # Staff (accounts in the Ficium platform institution) sign in to ficium-admin,
+    # so their reset links land there. Decided server-side from the account, never
+    # from anything the caller sends.
+    admin_public_url:          str = "https://ficium-admin.vercel.app"
+    platform_institution_id:   str = "00000000-0000-0000-0000-000000000001"
 
     # ── Rate limiting ─────────────────────────────────────────
     rate_limit_login:          int = 5       # attempts per minute per IP

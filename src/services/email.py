@@ -34,7 +34,7 @@ _RESET_TEMPLATE = """
 <div style="max-width:480px;margin:0 auto;background:white;border-radius:12px;padding:40px;border:1px solid rgba(10,10,26,0.08);">
   <div style="font-size:20px;font-weight:700;margin-bottom:8px;">Reset your password</div>
   <p style="color:#6B6B85;font-size:14px;line-height:1.6;">
-    A password reset was requested for your Ficium Portal account.
+    A password reset was requested for your {{ product }} account.
     This link expires in <strong>1 hour</strong> and can only be used once.
   </p>
   <a href="{{ url }}" style="display:inline-block;background:#2A1FE6;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;margin:24px 0;">
@@ -109,12 +109,12 @@ async def send_verification_email(to: str, verify_url: str) -> None:
     })
 
 
-async def send_password_reset_email(to: str, reset_url: str) -> None:
+async def send_password_reset_email(to: str, reset_url: str, product: str = "Ficium Portal") -> None:
     resend.Emails.send({
         "from":    f"{settings.email_from_name} <{settings.email_from}>",
         "to":      [to],
-        "subject": "Reset your Ficium Portal password",
-        "html":    _render(_RESET_TEMPLATE, url=reset_url),
+        "subject": f"Reset your {product} password",
+        "html":    _render(_RESET_TEMPLATE, url=reset_url, product=product),
     })
 
 

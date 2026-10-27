@@ -416,9 +416,11 @@ async def forgot_password(
         "ip_address": ip,
     })
 
-    reset_url = f"{settings.portal_public_url}/reset-password?token={raw_token}"
+    staff     = str(user.get("institution_id")) == settings.platform_institution_id
+    base      = settings.admin_public_url if staff else settings.portal_public_url
+    reset_url = f"{base.rstrip('/')}/reset-password?token={raw_token}"
     try:
-        await send_password_reset_email(user["email"], reset_url)
+        await send_password_reset_email(user["email"], reset_url, product="Ficium Admin" if staff else "Ficium Portal")
     except Exception as e:
         log.error("reset_email_failed", error=str(e))
 
