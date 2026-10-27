@@ -55,3 +55,32 @@ def test_token_works_once(env) -> None:
 def test_policy_is_enforced(env) -> None:
     _, _, c = env
     assert c.post("/auth/password/reset", json={"token": "raw-token", "new_password": "alllowercase123"}).status_code == 400
+
+
+class ForgotDB(ResetDB):
+    async def get_user_by_email(self, email: str) -> dict | None:
+        return next((u for u in self.users.values() if u["email"] == email), None)
+    async def create_password_reset_token(self, data: dict) -> dict:
+        self.tokens[str(len(self.tokens))] = {**data, "used": False}; return data
+
+
+@pytest.mark.parametrize("institution,base,product", [
+    ("00000000-0000-0000-0000-000000000001", "https://ficium-admin.vercel.app", "Ficium Admin"),
+    ("f192050a-dfdd-4da7-874e-c3db88f11e41", "https://ficium-portal.vercel.app", "Ficium Portal"),
+])
+def test_reset_link_goes_where_the_account_signs_in(monkeypatch: pytest.MonkeyPatch, institution: str, base: str, product: str) -> None:
+    import src.api.auth as auth_api
+    sent: list[tuple] = []
+    async def capture(to: str, url: str, product: str = "") -> None: sent.append((to, url, product))
+    async def allow(*a, **k): return True, 1
+    monkeypatch.setattr(auth_api, "send_password_reset_email", capture)
+    monkeypatch.setattr(auth_api, "check_rate_limit", allow)
+    db = ForgotDB(); db.add_user(institution_id=institution)
+    app.dependency_overrides[db_dependency] = lambda: db
+    try:
+        # A caller-supplied Origin must not influence where the link points.
+        r = TestClient(app).post("/auth/password/forgot", json={"username": "kj"}, headers={"Origin": "https://evil.example"})
+    finally:
+        app.dependency_overrides.clear()
+    assert r.status_code == 200 and len(sent) == 1
+    assert sent[0][1].startswith(f"{base}/reset-password?token=") and sent[0][2] == product
