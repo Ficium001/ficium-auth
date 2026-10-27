@@ -198,6 +198,15 @@ class SupabaseDB:
         r.raise_for_status()
         return r.json()[0]
 
+    async def cancel_reset_tokens(self, user_id: str) -> None:
+        r = await self._client.patch(
+            f"{BASE}/password_reset_tokens",
+            headers=_headers(),
+            params={"user_id": f"eq.{user_id}", "used": "eq.false"},
+            json={"used": True, "used_at": datetime.now(timezone.utc).isoformat()},
+        )
+        r.raise_for_status()
+
     async def get_password_reset_token(self, token_hash: str) -> Optional[dict]:
         r = await self._client.get(
             f"{BASE}/password_reset_tokens",

@@ -456,6 +456,7 @@ async def reset_password(
         "password_hash":        new_hash,
         "password_changed_at":  datetime.now(timezone.utc).isoformat(),
         "must_change_password": False,   # was "force_password_reset": no such column, every reset 500'd
+        "email_verified":       True,    # the link only ever goes to this address
         "updated_at":           datetime.now(timezone.utc).isoformat(),
     })
     # Whoever knew the old password must not stay signed in.

@@ -13,6 +13,7 @@ from redis.exceptions import RedisError
 
 from .api.auth import router as auth_router
 from .api.mfa import router as mfa_router
+from .api.staff import router as staff_router
 from .api.health import router as health_router
 from .api.jwks import router as jwks_router
 from .core.config import settings
@@ -126,6 +127,7 @@ if settings.metrics_enabled:
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(mfa_router)
+app.include_router(staff_router)
 app.include_router(jwks_router)
 
 

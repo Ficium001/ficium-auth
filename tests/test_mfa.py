@@ -28,7 +28,7 @@ class FakeDB:
     def add_user(self, **kw: Any) -> dict:
         u = {"id": str(uuid.uuid4()), "username": "kj", "email": "kj@ficium.net", "password_hash": hash_password(PW),
              "institution_id": "00000000-0000-0000-0000-000000000001", "role": "super_admin", "is_active": True,
-             "mfa_enabled": False, "mfa_secret": None, "must_change_password": False, **kw}
+             "mfa_enabled": False, "mfa_secret": None, "must_change_password": False, "email_verified": False, **kw}
         self.users[u["id"]] = u
         return u
 

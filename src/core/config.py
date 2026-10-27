@@ -110,6 +110,10 @@ class Settings(BaseSettings):
     # from anything the caller sends.
     admin_public_url:          str = "https://ficium-admin.vercel.app"
     platform_institution_id:   str = "00000000-0000-0000-0000-000000000001"
+    # Staff provisioning (POST /auth/staff/provision, used by ficium-admin's Team page)
+    staff_roles:               str = "super_admin,ficium_staff"   # roles allowed to invite staff
+    staff_email_domains:       str = "ficium.net"
+    staff_invite_ttl:          int = 86400                         # set-password link, 24 h
 
     # ── Rate limiting ─────────────────────────────────────────
     rate_limit_login:          int = 5       # attempts per minute per IP
