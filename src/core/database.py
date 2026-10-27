@@ -208,14 +208,16 @@ class SupabaseDB:
         rows = r.json()
         return rows[0] if rows else None
 
-    async def mark_reset_token_used(self, token_id: str) -> None:
+    async def mark_reset_token_used(self, token_id: str) -> bool:
+        """Consume a reset token; True only for the caller that actually flipped it."""
         r = await self._client.patch(
             f"{BASE}/password_reset_tokens",
-            headers=_headers(),
-            params={"id": f"eq.{token_id}"},
-            json={"used": True},
+            headers=_headers("return=representation"),
+            params={"id": f"eq.{token_id}", "used": "eq.false"},
+            json={"used": True, "used_at": datetime.now(timezone.utc).isoformat()},
         )
         r.raise_for_status()
+        return len(r.json()) == 1
 
     # ── email verification tokens ─────────────────────────────
 
