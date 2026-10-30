@@ -3,6 +3,7 @@
 # Sessions, rate limiting, lockouts, token blacklist, cache
 # =============================================================
 
+import hashlib
 import json
 import time
 from typing import Any, cast
@@ -213,6 +214,59 @@ async def clear_failed_logins(ip: str, user_id: str | None = None) -> None:
             await r.delete(RedisKeys.user_lockout(user_id))
     except RedisError as exc:
         _degraded("clear_failed_logins", exc)
+
+
+# ── Per-account lockout ───────────────────────────────────────
+# The per-IP lockout alone lets one account be guessed from many IPs. This
+# counts failures per account NAME (hashed, so usernames aren't stored), for
+# names that exist and names that don't alike, so the response never reveals
+# which accounts exist.
+def _acct(username: str) -> str:
+    return hashlib.sha256(username.strip().lower().encode()).hexdigest()[:32]
+
+
+def _acct_fails(username: str) -> str:
+    return f"acct_login_fails:{_acct(username)}"
+
+
+def _acct_lock(username: str) -> str:
+    return f"acct_lockout:{_acct(username)}"
+
+
+async def record_account_failure(username: str) -> bool:
+    """Count a failed login for this account name. True exactly when this
+    failure locks it (so the owner is alerted once, not on every attempt)."""
+    key, window = _acct_fails(username), settings.rate_limit_login_window * 10
+    try:
+        r = await get_redis()
+        n = int(await r.incr(key))
+        if n == 1:
+            await r.expire(key, window)
+        if n == settings.lockout_threshold:
+            await r.setex(_acct_lock(username), settings.lockout_duration, "1")
+            return True
+        return False
+    except RedisError as exc:
+        _degraded("record_account_failure", exc)
+        return _mem_incr(key, window) == settings.lockout_threshold
+
+
+async def is_account_locked(username: str) -> bool:
+    try:
+        r = await get_redis()
+        return bool(await r.exists(_acct_lock(username)))
+    except RedisError as exc:
+        _degraded("is_account_locked", exc)
+        return _mem_get(_acct_fails(username)) >= settings.lockout_threshold
+
+
+async def clear_account_failures(username: str) -> None:
+    _MEM.pop(_acct_fails(username), None)
+    try:
+        r = await get_redis()
+        await r.delete(_acct_fails(username), _acct_lock(username))
+    except RedisError as exc:
+        _degraded("clear_account_failures", exc)
 
 
 # ── Token blacklist ───────────────────────────────────────────

@@ -19,6 +19,7 @@ from ..core.security import (
 )
 from ..core.redis import (
     check_rate_limit, is_locked_out, record_failed_login,
+    is_account_locked, record_account_failure, clear_account_failures,
     clear_failed_logins, add_user_session,
     remove_user_session, get_user_session_ids, cache_set, RedisKeys,
 )
@@ -29,6 +30,7 @@ from ..schemas.auth import (
     VerifyEmailRequest, SessionListResponse, SessionInfo, MeResponse,
 )
 from ..services.email import (
+    send_lockout_alert,
     send_password_reset_email,
 )
 from ..middleware.auth_middleware import get_current_user, AuthenticatedUser, get_client_ip, get_user_agent
@@ -168,7 +170,7 @@ async def login(
     if not allowed:
         raise HTTPException(429, "Too many login attempts.")
 
-    if await is_locked_out(ip):
+    if await is_locked_out(ip) or await is_account_locked(body.username):
         raise HTTPException(429, "Account temporarily locked due to repeated failed attempts.")
 
     user = await db.get_user_by_username(body.username)
@@ -178,6 +180,13 @@ async def login(
 
     if not user or not pw_ok:
         await record_failed_login(ip, user["id"] if user else None)
+        locked_now = await record_account_failure(body.username)
+        if locked_now and user and user.get("email"):
+            # Tell the owner once, when the lock starts. Never fail the request on it.
+            try:
+                await send_lockout_alert(user["email"], ip, settings.lockout_threshold)
+            except Exception as e:  # noqa: BLE001
+                log.error("lockout_alert_failed", user_id=user["id"], error=type(e).__name__)
         await db.log_audit({
             "user_id":    user["id"] if user else None,
             "event_type": "login.failed",
@@ -191,6 +200,7 @@ async def login(
         raise HTTPException(403, "Account is deactivated. Contact your administrator.")
 
     await clear_failed_logins(ip, user["id"])
+    await clear_account_failures(body.username)
 
     if user.get("mfa_enabled"):
         challenge_id = generate_secure_token(16)
