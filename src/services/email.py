@@ -4,6 +4,9 @@
 # All templates bank-grade: clear, professional, no fluff
 # =============================================================
 
+import asyncio
+from typing import Any
+
 import resend
 from jinja2 import Environment, BaseLoader
 from ..core.config import settings
@@ -96,12 +99,19 @@ _LOCKOUT_ALERT_TEMPLATE = """
 _jinja = Environment(loader=BaseLoader(), autoescape=True)
 
 
+async def _send(payload: dict[str, Any]) -> None:
+    """resend.Emails.send is a blocking HTTP call. Run it on a worker thread so
+    one slow or hanging send never stalls every other request on this server.
+    Errors still propagate to the caller (fail loud)."""
+    await asyncio.to_thread(resend.Emails.send, payload)
+
+
 def _render(template: str, **ctx) -> str:
     return _jinja.from_string(template).render(**ctx)
 
 
 async def send_verification_email(to: str, verify_url: str) -> None:
-    resend.Emails.send({
+    await _send({
         "from":    f"{settings.email_from_name} <{settings.email_from}>",
         "to":      [to],
         "subject": "Verify your Ficium Portal email",
@@ -132,7 +142,7 @@ _INVITE_TEMPLATE = """
 
 
 async def send_staff_invite_email(to: str, url: str, username: str, inviter: str) -> None:
-    resend.Emails.send({
+    await _send({
         "from":    f"{settings.email_from_name} <{settings.email_from}>",
         "to":      [to],
         "subject": "You've been invited to Ficium Admin",
@@ -141,7 +151,7 @@ async def send_staff_invite_email(to: str, url: str, username: str, inviter: str
 
 
 async def send_password_reset_email(to: str, reset_url: str, product: str = "Ficium Portal") -> None:
-    resend.Emails.send({
+    await _send({
         "from":    f"{settings.email_from_name} <{settings.email_from}>",
         "to":      [to],
         "subject": f"Reset your {product} password",
@@ -156,7 +166,7 @@ async def send_suspicious_login_alert(
     time: str,
     revoke_url: str,
 ) -> None:
-    resend.Emails.send({
+    await _send({
         "from":    f"{settings.email_from_name} <{settings.email_from}>",
         "to":      [to],
         "subject": "⚠ New sign-in to your Ficium Portal account",
@@ -165,7 +175,7 @@ async def send_suspicious_login_alert(
 
 
 async def send_lockout_alert(to: str, ip: str, attempts: int) -> None:
-    resend.Emails.send({
+    await _send({
         "from":    f"{settings.email_from_name} <{settings.email_from}>",
         "to":      [to],
         "subject": "⚠ Your Ficium Portal account has been locked",
