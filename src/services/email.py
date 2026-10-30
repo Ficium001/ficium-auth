@@ -5,7 +5,6 @@
 # =============================================================
 
 import asyncio
-from typing import Any
 
 import resend
 from jinja2 import Environment, BaseLoader
@@ -99,7 +98,7 @@ _LOCKOUT_ALERT_TEMPLATE = """
 _jinja = Environment(loader=BaseLoader(), autoescape=True)
 
 
-async def _send(payload: dict[str, Any]) -> None:
+async def _send(payload: resend.Emails.SendParams) -> None:
     """resend.Emails.send is a blocking HTTP call. Run it on a worker thread so
     one slow or hanging send never stalls every other request on this server.
     Errors still propagate to the caller (fail loud)."""
