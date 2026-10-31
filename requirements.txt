@@ -1,5 +1,5 @@
 # Web framework
-fastapi==0.158.2
+fastapi==0.162.0
 uvicorn[standard]==0.54.0
 python-multipart==0.0.32
 
@@ -25,7 +25,7 @@ jinja2==3.1.6
 
 # Validation
 pydantic==2.14.1
-pydantic-settings==2.16.1
+pydantic-settings==2.16.2
 email-validator==2.3.0
 
 # HTTP client
@@ -39,8 +39,8 @@ prometheus-fastapi-instrumentator==8.1.0
 slowapi==0.1.10
 
 # Testing
-pytest==9.1.1
-pytest-asyncio==1.4.0
+pytest==9.2.0
+pytest-asyncio==1.4.1
 
 # Enterprise SSO (Phase 2 — requires libldap2-dev, uncomment when needed)
 # python3-saml==1.16.0
