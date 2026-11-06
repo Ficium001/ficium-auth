@@ -5,11 +5,15 @@
 # using the service role key (bypasses RLS).
 # =============================================================
 
+from datetime import UTC, datetime
+
 import httpx
-from datetime import datetime, timezone
-from typing import Optional
-from .config import settings
+import structlog
 from sqlalchemy.orm import DeclarativeBase
+
+from .config import settings
+
+log = structlog.get_logger()
 
 SCHEMA = "auth_portal"
 BASE   = f"{settings.supabase_url}/rest/v1"
@@ -36,7 +40,7 @@ class SupabaseDB:
 
     # ── auth_users ────────────────────────────────────────────
 
-    async def get_user_by_email(self, email: str) -> Optional[dict]:
+    async def get_user_by_email(self, email: str) -> dict | None:
         r = await self._client.get(
             f"{BASE}/auth_users",
             headers=_headers(),
@@ -46,7 +50,7 @@ class SupabaseDB:
         rows = r.json()
         return rows[0] if rows else None
 
-    async def get_user_by_username(self, username: str) -> Optional[dict]:
+    async def get_user_by_username(self, username: str) -> dict | None:
         r = await self._client.get(
             f"{BASE}/auth_users",
             headers=_headers(),
@@ -56,7 +60,7 @@ class SupabaseDB:
         rows = r.json()
         return rows[0] if rows else None
 
-    async def get_user_by_id(self, user_id: str) -> Optional[dict]:
+    async def get_user_by_id(self, user_id: str) -> dict | None:
         r = await self._client.get(
             f"{BASE}/auth_users",
             headers=_headers(),
@@ -95,7 +99,7 @@ class SupabaseDB:
         r.raise_for_status()
         return r.json()[0]
 
-    async def get_session_by_token_hash(self, token_hash: str) -> Optional[dict]:
+    async def get_session_by_token_hash(self, token_hash: str) -> dict | None:
         r = await self._client.get(
             f"{BASE}/auth_sessions",
             headers=_headers(),
@@ -161,7 +165,7 @@ class SupabaseDB:
             f"{BASE}/mfa_backup_codes",
             headers=_headers("return=representation"),
             params={"id": f"eq.{code_id}", "used_at": "is.null"},
-            json={"used_at": datetime.now(timezone.utc).isoformat()},
+            json={"used_at": datetime.now(UTC).isoformat()},
         )
         r.raise_for_status()
         return len(r.json()) == 1
@@ -184,8 +188,9 @@ class SupabaseDB:
                 json=data,
             )
             r.raise_for_status()
-        except Exception:
-            pass  # audit failure must never break auth flow
+        except Exception as e:  # noqa: BLE001 - audit failure must never break auth, but must be seen
+            log.error("audit_write_failed", error_type=type(e).__name__, error=str(e),
+                      event_type=data.get("event_type"))
 
     # ── password reset tokens ─────────────────────────────────
 
@@ -203,11 +208,11 @@ class SupabaseDB:
             f"{BASE}/password_reset_tokens",
             headers=_headers(),
             params={"user_id": f"eq.{user_id}", "used": "eq.false"},
-            json={"used": True, "used_at": datetime.now(timezone.utc).isoformat()},
+            json={"used": True, "used_at": datetime.now(UTC).isoformat()},
         )
         r.raise_for_status()
 
-    async def get_password_reset_token(self, token_hash: str) -> Optional[dict]:
+    async def get_password_reset_token(self, token_hash: str) -> dict | None:
         r = await self._client.get(
             f"{BASE}/password_reset_tokens",
             headers=_headers(),
@@ -223,7 +228,7 @@ class SupabaseDB:
             f"{BASE}/password_reset_tokens",
             headers=_headers("return=representation"),
             params={"id": f"eq.{token_id}", "used": "eq.false"},
-            json={"used": True, "used_at": datetime.now(timezone.utc).isoformat()},
+            json={"used": True, "used_at": datetime.now(UTC).isoformat()},
         )
         r.raise_for_status()
         return len(r.json()) == 1
@@ -239,7 +244,7 @@ class SupabaseDB:
         r.raise_for_status()
         return r.json()[0]
 
-    async def get_email_verification_token(self, token_hash: str) -> Optional[dict]:
+    async def get_email_verification_token(self, token_hash: str) -> dict | None:
         r = await self._client.get(
             f"{BASE}/email_verification_tokens",
             headers=_headers(),
@@ -270,7 +275,7 @@ class SupabaseDB:
                 params={"limit": "0"},
             )
             return r.status_code < 500
-        except Exception:
+        except Exception:  # noqa: BLE001 - health probe: any failure means unhealthy
             return False
 
     async def close(self) -> None:
@@ -330,7 +335,7 @@ class SupabaseDB:
 
 
 # ── Singleton ─────────────────────────────────────────────────
-_db: Optional[SupabaseDB] = None
+_db: SupabaseDB | None = None
 
 
 def get_db_client() -> SupabaseDB:

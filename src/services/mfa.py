@@ -3,11 +3,12 @@
 # RFC 6238 compliant, pyotp
 # =============================================================
 
+import base64
+from io import BytesIO
+
 import pyotp
 import qrcode
 import qrcode.image.svg
-from io import BytesIO
-import base64
 
 from ..core.config import settings
 from ..core.security import generate_backup_codes, verify_token_hash

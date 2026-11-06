@@ -3,13 +3,13 @@
 # JWT verification, session validation, IP allowlist check
 # =============================================================
 
-from typing import Optional
-from fastapi import Request, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError
 
-from ..core.security import verify_access_token, get_token_from_header
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWTError as JWTError
+
 from ..core.redis import is_token_blacklisted
+from ..core.security import get_token_from_header, verify_access_token
 
 security = HTTPBearer(auto_error=False)
 
@@ -25,7 +25,7 @@ class AuthenticatedUser:
 
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> AuthenticatedUser:
     """
     FastAPI dependency — validates JWT, checks blacklist.

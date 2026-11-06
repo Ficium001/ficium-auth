@@ -2,7 +2,7 @@
 # ficium-auth — Pydantic schemas (request/response)
 # =============================================================
 
-from typing import Optional
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -19,11 +19,11 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token:         Optional[str] = None
+    access_token:         str | None = None
     token_type:           str           = "bearer"
-    expires_in:           Optional[int] = None
+    expires_in:           int | None = None
     mfa_required:         bool          = False
-    mfa_token:            Optional[str] = None   # short-lived, for /auth/mfa/verify
+    mfa_token:            str | None = None   # short-lived, for /auth/mfa/verify
     must_change_password: bool          = False   # true after admin password reset
 
 
@@ -46,8 +46,8 @@ class MFAVerifyEnrolRequest(BaseModel):
 
 class MFAVerifyRequest(BaseModel):
     mfa_token:   str           = Field(..., min_length=10, max_length=128)
-    totp_code:   Optional[str] = Field(None, min_length=6, max_length=6, pattern="^[0-9]{6}$")
-    backup_code: Optional[str] = Field(None, min_length=8, max_length=20)
+    totp_code:   str | None = Field(None, min_length=6, max_length=6, pattern="^[0-9]{6}$")
+    backup_code: str | None = Field(None, min_length=8, max_length=20)
 
 
 class MFAVerifyResponse(BaseModel):
@@ -64,8 +64,8 @@ class MFADisableRequest(BaseModel):
 # ── Password management ───────────────────────────────────────
 class ForgotPasswordRequest(BaseModel):
     # Accept either username or email — portal sends username since that's how users log in
-    username: Optional[str] = Field(None, min_length=1, max_length=60)
-    email:    Optional[str] = None
+    username: str | None = Field(None, min_length=1, max_length=60)
+    email:    str | None = None
 
     @field_validator("username")
     @classmethod
@@ -113,10 +113,10 @@ class ResendVerificationRequest(BaseModel):
 # ── Sessions ──────────────────────────────────────────────────
 class SessionInfo(BaseModel):
     id:           str
-    ip_address:   Optional[str] = None
-    user_agent:   Optional[str] = None
+    ip_address:   str | None = None
+    user_agent:   str | None = None
     created_at:   str
-    last_used_at: Optional[str] = None
+    last_used_at: str | None = None
     is_current:   bool = False
 
 

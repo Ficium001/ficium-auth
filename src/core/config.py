@@ -4,9 +4,10 @@
 # Fail fast — missing required config crashes immediately
 # =============================================================
 
-from pydantic_settings import BaseSettings
-from pydantic import Field, computed_field, field_validator
 from typing import Literal
+
+from pydantic import Field, computed_field, field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
