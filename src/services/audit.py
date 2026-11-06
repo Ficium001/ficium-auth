@@ -4,7 +4,7 @@
 # =============================================================
 
 import uuid
-from typing import Optional, Any
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,11 +23,11 @@ class AuditService:
         self,
         event_type:     str,
         outcome:        str,
-        user_id:        Optional[uuid.UUID] = None,
-        institution_id: Optional[uuid.UUID] = None,
-        ip_address:     Optional[str]       = None,
-        user_agent:     Optional[str]       = None,
-        metadata:       Optional[dict[str, Any]] = None,
+        user_id:        uuid.UUID | None = None,
+        institution_id: uuid.UUID | None = None,
+        ip_address:     str | None       = None,
+        user_agent:     str | None       = None,
+        metadata:       dict[str, Any] | None = None,
     ) -> None:
         """
         Append an audit event. Never raises — audit must not break auth flow.
@@ -54,7 +54,7 @@ class AuditService:
                 institution_id=str(institution_id) if institution_id else None,
                 ip_address=ip_address,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             # Audit failure must never block auth
             log.error("audit_write_failed", error=str(e), event_type=event_type)
 

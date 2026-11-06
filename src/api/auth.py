@@ -3,37 +3,65 @@
 # =============================================================
 
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Literal, Optional, cast
+from datetime import UTC, datetime, timedelta
+from typing import Literal, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
-from jose import JWTError
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from jwt import PyJWTError as JWTError
 
-from ..core.database import db_dependency, SupabaseDB
 from ..core.config import settings
-from ..core.security import (
-    hash_password, verify_password, validate_password_policy,
-    PasswordPolicyError, issue_access_token, generate_secure_token,
-    hash_token, generate_refresh_token, verify_access_token, get_token_from_header,
-)
+from ..core.database import SupabaseDB, db_dependency
 from ..core.redis import (
-    check_rate_limit, is_locked_out, record_failed_login,
-    is_account_locked, record_account_failure, clear_account_failures,
-    clear_failed_logins, add_user_session,
-    remove_user_session, get_user_session_ids, cache_set, RedisKeys,
+    RedisKeys,
+    add_user_session,
+    cache_set,
+    check_rate_limit,
+    clear_account_failures,
+    clear_failed_logins,
+    get_user_session_ids,
+    is_account_locked,
+    is_locked_out,
+    record_account_failure,
+    record_failed_login,
+    remove_user_session,
+)
+from ..core.security import (
+    PasswordPolicyError,
+    generate_refresh_token,
+    generate_secure_token,
+    get_token_from_header,
+    hash_password,
+    hash_token,
+    issue_access_token,
+    validate_password_policy,
+    verify_access_token,
+    verify_password,
+)
+from ..middleware.auth_middleware import (
+    AuthenticatedUser,
+    get_client_ip,
+    get_current_user,
+    get_user_agent,
 )
 from ..schemas.auth import (
-    LoginRequest, LoginResponse,
-    ForgotPasswordRequest, ForgotPasswordResponse,
-    ResetPasswordRequest, ChangePasswordRequest, ForceChangePasswordRequest, PasswordActionResponse,
-    VerifyEmailRequest, SessionListResponse, SessionInfo, MeResponse,
+    ChangePasswordRequest,
+    ForceChangePasswordRequest,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
+    PasswordActionResponse,
+    ResetPasswordRequest,
+    SessionInfo,
+    SessionListResponse,
+    VerifyEmailRequest,
 )
 from ..services.email import (
     send_lockout_alert,
     send_password_reset_email,
 )
-from ..middleware.auth_middleware import get_current_user, AuthenticatedUser, get_client_ip, get_user_agent
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -86,7 +114,7 @@ async def start_session(
         institution_id=user["institution_id"],
     )
 
-    access_token, exp  = issue_access_token(
+    access_token, _exp = issue_access_token(
         user_id=user["id"],
         institution_id=user["institution_id"],
         role=user["role"],
@@ -105,11 +133,11 @@ async def start_session(
         await remove_user_session(user["id"], oldest)
         await db.update_session(oldest, {
             "is_active":    False,
-            "revoked_at":   datetime.now(timezone.utc).isoformat(),
+            "revoked_at":   datetime.now(UTC).isoformat(),
             "revoke_reason": "session_limit",
         })
 
-    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=settings.jwt_refresh_ttl)).isoformat()
+    expires_at = (datetime.now(UTC) + timedelta(seconds=settings.jwt_refresh_ttl)).isoformat()
     await db.create_session({
         "id":                 session_id,
         "user_id":            user["id"],
@@ -124,7 +152,7 @@ async def start_session(
     await add_user_session(user["id"], session_id)
 
     await db.update_user(user["id"], {
-        "last_login_at": datetime.now(timezone.utc).isoformat(),
+        "last_login_at": datetime.now(UTC).isoformat(),
         "last_login_ip": ip,
     })
 
@@ -236,12 +264,12 @@ async def force_change_password(
         await db.update_user(current.user_id, {
             "password_hash":        new_hash,
             "must_change_password": False,
-            "updated_at":           datetime.now(timezone.utc).isoformat(),
+            "updated_at":           datetime.now(UTC).isoformat(),
         })
         log.info("force_change_success", user_id=current.user_id)
-    except Exception as e:
-        log.error("force_change_db_error", user_id=current.user_id, error=str(e))
-        raise HTTPException(500, f"Failed to update password: {str(e)}")
+    except Exception as e:  # noqa: BLE001 - any storage failure: log it, tell the user nothing internal
+        log.error("force_change_db_error", user_id=current.user_id, error_type=type(e).__name__, error=str(e))
+        raise HTTPException(500, "Could not update your password. Please try again.") from None
 
     await db.log_audit({
         "user_id":        current.user_id,
@@ -283,7 +311,7 @@ async def logout(
     if user_id and session_id:
         await db.update_session(session_id, {
             "is_active":     False,
-            "revoked_at":    datetime.now(timezone.utc).isoformat(),
+            "revoked_at":    datetime.now(UTC).isoformat(),
             "revoke_reason": "logout",
         })
         await remove_user_session(user_id, session_id)
@@ -304,7 +332,7 @@ async def refresh_token(
     request:  Request,
     response: Response,
     db:       SupabaseDB = Depends(db_dependency),
-    refresh_cookie: Optional[str] = Cookie(None, alias=settings.session_cookie_name),
+    refresh_cookie: str | None = Cookie(None, alias=settings.session_cookie_name),
 ) -> LoginResponse:
     if not refresh_cookie:
         raise HTTPException(401, "No refresh token.")
@@ -315,8 +343,8 @@ async def refresh_token(
     if not session:
         raise HTTPException(401, "Invalid or expired session.")
 
-    expires_at = datetime.fromisoformat(session["expires_at"].replace("Z", "+00:00"))
-    if expires_at < datetime.now(timezone.utc):
+    expires_at = datetime.fromisoformat(session["expires_at"])
+    if expires_at < datetime.now(UTC):
         raise HTTPException(401, "Session expired.")
 
     user = await db.get_user_by_id(session["user_id"])
@@ -326,11 +354,11 @@ async def refresh_token(
     # Rotate refresh token
     new_raw_rt, new_rt_hash = generate_refresh_token()
     new_session_id          = str(uuid.uuid4())
-    new_expires             = (datetime.now(timezone.utc) + timedelta(seconds=settings.jwt_refresh_ttl)).isoformat()
+    new_expires             = (datetime.now(UTC) + timedelta(seconds=settings.jwt_refresh_ttl)).isoformat()
 
     await db.update_session(session["id"], {
         "is_active":    False,
-        "revoked_at":   datetime.now(timezone.utc).isoformat(),
+        "revoked_at":   datetime.now(UTC).isoformat(),
         "revoke_reason": "rotated",
     })
     await remove_user_session(user["id"], session["id"])
@@ -353,7 +381,7 @@ async def refresh_token(
         institution_id=user["institution_id"],
     )
 
-    access_token, exp = issue_access_token(
+    access_token, _exp = issue_access_token(
         user_id=user["id"],
         institution_id=user["institution_id"],
         role=user["role"],
@@ -417,7 +445,7 @@ async def forgot_password(
 
     raw_token  = generate_secure_token()
     token_hash = hash_token(raw_token)
-    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=settings.password_reset_ttl)).isoformat()
+    expires_at = (datetime.now(UTC) + timedelta(seconds=settings.password_reset_ttl)).isoformat()
 
     await db.create_password_reset_token({
         "user_id":    user["id"],
@@ -431,8 +459,8 @@ async def forgot_password(
     reset_url = f"{base.rstrip('/')}/reset-password?token={raw_token}"
     try:
         await send_password_reset_email(user["email"], reset_url, product="Ficium Admin" if staff else "Ficium Portal")
-    except Exception as e:
-        log.error("reset_email_failed", error=str(e))
+    except Exception as e:  # noqa: BLE001 - same response whether or not the email left (no account enumeration)
+        log.error("reset_email_failed", error_type=type(e).__name__, error=str(e))
 
     return msg
 
@@ -449,8 +477,8 @@ async def reset_password(
     if not token:
         raise HTTPException(400, "Invalid or expired reset token.")
 
-    expires_at = datetime.fromisoformat(token["expires_at"].replace("Z", "+00:00"))
-    if expires_at < datetime.now(timezone.utc):
+    expires_at = datetime.fromisoformat(token["expires_at"])
+    if expires_at < datetime.now(UTC):
         raise HTTPException(400, "Reset token has expired.")
 
     try:
@@ -464,10 +492,10 @@ async def reset_password(
         raise HTTPException(400, "Invalid or expired reset token.")
     await db.update_user(token["user_id"], {
         "password_hash":        new_hash,
-        "password_changed_at":  datetime.now(timezone.utc).isoformat(),
+        "password_changed_at":  datetime.now(UTC).isoformat(),
         "must_change_password": False,   # was "force_password_reset": no such column, every reset 500'd
         "email_verified":       True,    # the link only ever goes to this address
-        "updated_at":           datetime.now(timezone.utc).isoformat(),
+        "updated_at":           datetime.now(UTC).isoformat(),
     })
     # Whoever knew the old password must not stay signed in.
     await db.revoke_all_user_sessions(token["user_id"])
@@ -501,7 +529,7 @@ async def change_password(
 
     await db.update_user(user["id"], {
         "password_hash":       hash_password(body.new_password),
-        "password_changed_at": datetime.now(timezone.utc).isoformat(),
+        "password_changed_at": datetime.now(UTC).isoformat(),
     })
 
     return PasswordActionResponse(message="Password changed successfully.")
@@ -519,8 +547,8 @@ async def verify_email(
     if not token:
         raise HTTPException(400, "Invalid or expired verification token.")
 
-    expires_at = datetime.fromisoformat(token["expires_at"].replace("Z", "+00:00"))
-    if expires_at < datetime.now(timezone.utc):
+    expires_at = datetime.fromisoformat(token["expires_at"])
+    if expires_at < datetime.now(UTC):
         raise HTTPException(400, "Verification token has expired.")
 
     await db.mark_email_verified(token["id"], token["user_id"])

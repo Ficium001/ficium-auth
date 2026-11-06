@@ -4,9 +4,11 @@
 # =============================================================
 
 import base64
-from fastapi import APIRouter, HTTPException
-from cryptography.hazmat.primitives.serialization import load_pem_public_key
+
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from fastapi import APIRouter, HTTPException
+
 from ..core.config import settings
 
 router = APIRouter(tags=["JWKS"])
@@ -39,7 +41,7 @@ def _build_jwks() -> dict:
     pem_bytes = _normalize_pem(pem)
     pub = load_pem_public_key(pem_bytes)
     if not isinstance(pub, RSAPublicKey):
-        raise ValueError("JWT_PUBLIC_KEY is not an RSA public key")
+        raise TypeError("JWT_PUBLIC_KEY is not an RSA public key")
     nums = pub.public_numbers()
     return {
         "keys": [{

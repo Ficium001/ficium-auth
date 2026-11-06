@@ -16,7 +16,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError
+from jwt import PyJWTError as JWTError
 
 from ..core.config import settings
 from ..core.crypto import MFAUnavailable, decrypt_secret, encrypt_secret

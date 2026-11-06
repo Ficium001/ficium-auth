@@ -1,0 +1,7 @@
+# Lint settings for ficium-auth. CI runs `ruff check src tests` and it blocks merges.
+[lint.flake8-bugbear]
+# FastAPI's dependency markers are meant to be called in argument defaults.
+extend-immutable-calls = [
+  "fastapi.Depends", "fastapi.Security", "fastapi.Cookie",
+  "fastapi.Header", "fastapi.Query", "fastapi.Body",
+]

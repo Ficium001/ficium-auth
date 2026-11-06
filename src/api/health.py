@@ -4,11 +4,12 @@
 # =============================================================
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+from ..core.config import settings
 from ..core.database import check_db_health
 from ..core.redis import check_redis_health
-from ..core.config import settings
 from ..schemas.auth import HealthResponse
-from fastapi.responses import JSONResponse
 
 router = APIRouter(tags=["Health"])
 

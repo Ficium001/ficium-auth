@@ -12,10 +12,10 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from redis.exceptions import RedisError
 
 from .api.auth import router as auth_router
-from .api.mfa import router as mfa_router
-from .api.staff import router as staff_router
 from .api.health import router as health_router
 from .api.jwks import router as jwks_router
+from .api.mfa import router as mfa_router
+from .api.staff import router as staff_router
 from .core.config import settings
 from .core.redis import close_redis, get_redis
 

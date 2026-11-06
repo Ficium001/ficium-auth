@@ -9,9 +9,10 @@ import secrets
 import time
 from typing import Any
 
+import jwt
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
-from jose import jwt
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from jwt.types import Options
 
 from .config import settings
 
@@ -133,7 +134,7 @@ def verify_access_token(token: str, ignore_exp: bool = False) -> dict[str, Any]:
     expired `exp` claim — used by /logout so an expired-but-genuine
     token can still identify the session to revoke.
     """
-    options = {"verify_iss": False}
+    options: Options = {"verify_iss": False}
     if ignore_exp:
         options["verify_exp"] = False
     return jwt.decode(

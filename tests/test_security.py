@@ -8,16 +8,27 @@
 
 import time
 
+import jwt
 import pytest
-from jose import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 
 from src.core import security
 from src.core.security import (
-    hash_password, verify_password, validate_password_policy, PasswordPolicyError,
-    issue_access_token, verify_access_token, get_token_from_header,
-    generate_secure_token, hash_token, verify_token_hash,
-    generate_refresh_token, generate_backup_codes, constant_time_compare,
-    _use_rs256, _jwt_algorithm,
+    PasswordPolicyError,
+    _jwt_algorithm,
+    _use_rs256,
+    constant_time_compare,
+    generate_backup_codes,
+    generate_refresh_token,
+    generate_secure_token,
+    get_token_from_header,
+    hash_password,
+    hash_token,
+    issue_access_token,
+    validate_password_policy,
+    verify_access_token,
+    verify_password,
+    verify_token_hash,
 )
 
 
@@ -98,7 +109,7 @@ class TestJWT:
         # Flip a char in the signature segment
         head, payload, sig = token.split(".")
         tampered = f"{head}.{payload}.{sig[:-3]}xxx"
-        with pytest.raises(Exception):
+        with pytest.raises(InvalidTokenError):
             verify_access_token(tampered)
 
     def test_extra_claims_included(self):
@@ -115,7 +126,7 @@ class TestJWT:
         try:
             security.settings.jwt_access_ttl = -10
             token, _ = issue_access_token("u", "i", "admin", "s")
-            with pytest.raises(Exception):
+            with pytest.raises(ExpiredSignatureError):
                 verify_access_token(token)
         finally:
             security.settings.jwt_access_ttl = orig

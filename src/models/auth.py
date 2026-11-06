@@ -4,21 +4,28 @@
 # =============================================================
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, String, Text,
-    UniqueConstraint, Index, func,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.database import Base
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ── Users ─────────────────────────────────────────────────────
@@ -39,11 +46,11 @@ class AuthUser(Base):
     role:           Mapped[str]               = mapped_column(String(50), nullable=False, default="analyst")
     is_active:      Mapped[bool]              = mapped_column(Boolean, default=True, nullable=False)
     mfa_enabled:    Mapped[bool]              = mapped_column(Boolean, default=False, nullable=False)
-    mfa_secret:     Mapped[Optional[str]]     = mapped_column(Text, nullable=True)   # encrypted
-    last_login_at:  Mapped[Optional[datetime]]= mapped_column(DateTime(timezone=True), nullable=True)
-    last_login_ip:  Mapped[Optional[str]]     = mapped_column(String(45), nullable=True)
+    mfa_secret:     Mapped[str | None]     = mapped_column(Text, nullable=True)   # encrypted
+    last_login_at:  Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_ip:  Mapped[str | None]     = mapped_column(String(45), nullable=True)
     failed_attempts:Mapped[int]               = mapped_column(Integer, default=0, nullable=False)
-    locked_until:   Mapped[Optional[datetime]]= mapped_column(DateTime(timezone=True), nullable=True)
+    locked_until:   Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
     password_changed_at: Mapped[datetime]     = mapped_column(DateTime(timezone=True), default=utcnow)
     created_at:     Mapped[datetime]          = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
     updated_at:     Mapped[datetime]          = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -67,15 +74,15 @@ class AuthSession(Base):
     id:                  Mapped[uuid.UUID]        = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id:             Mapped[uuid.UUID]        = mapped_column(UUID(as_uuid=True), ForeignKey("auth_portal.auth_users.id", ondelete="CASCADE"), nullable=False)
     refresh_token_hash:  Mapped[str]              = mapped_column(String(64), nullable=False, unique=True)
-    ip_address:          Mapped[Optional[str]]    = mapped_column(String(45), nullable=True)
-    user_agent:          Mapped[Optional[str]]    = mapped_column(Text, nullable=True)
-    device_fingerprint:  Mapped[Optional[str]]    = mapped_column(String(64), nullable=True)
+    ip_address:          Mapped[str | None]    = mapped_column(String(45), nullable=True)
+    user_agent:          Mapped[str | None]    = mapped_column(Text, nullable=True)
+    device_fingerprint:  Mapped[str | None]    = mapped_column(String(64), nullable=True)
     is_active:           Mapped[bool]             = mapped_column(Boolean, default=True, nullable=False)
     created_at:          Mapped[datetime]         = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
     last_used_at:        Mapped[datetime]         = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at:          Mapped[datetime]         = mapped_column(DateTime(timezone=True), nullable=False)
-    revoked_at:          Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    revoke_reason:       Mapped[Optional[str]]    = mapped_column(String(100), nullable=True)
+    revoked_at:          Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoke_reason:       Mapped[str | None]    = mapped_column(String(100), nullable=True)
 
     user: Mapped["AuthUser"] = relationship(back_populates="sessions")
 
@@ -91,7 +98,7 @@ class MFABackupCode(Base):
     id:         Mapped[uuid.UUID]         = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id:    Mapped[uuid.UUID]         = mapped_column(UUID(as_uuid=True), ForeignKey("auth_portal.auth_users.id", ondelete="CASCADE"), nullable=False)
     code_hash:  Mapped[str]               = mapped_column(String(64), nullable=False)
-    used_at:    Mapped[Optional[datetime]]= mapped_column(DateTime(timezone=True), nullable=True)
+    used_at:    Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime]          = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user: Mapped["AuthUser"] = relationship(back_populates="mfa_backup_codes")
@@ -110,10 +117,10 @@ class PasswordResetToken(Base):
     user_id:     Mapped[uuid.UUID]   = mapped_column(UUID(as_uuid=True), ForeignKey("auth_portal.auth_users.id", ondelete="CASCADE"), nullable=False)
     token_hash:  Mapped[str]         = mapped_column(String(64), nullable=False, unique=True)
     used:        Mapped[bool]        = mapped_column(Boolean, default=False, nullable=False)
-    ip_address:  Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    ip_address:  Mapped[str | None] = mapped_column(String(45), nullable=True)
     created_at:  Mapped[datetime]    = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at:  Mapped[datetime]    = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at:     Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_at:     Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 # ── Email verification tokens ─────────────────────────────────
@@ -143,7 +150,7 @@ class IPAllowlist(Base):
     id:             Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     institution_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     cidr:           Mapped[str]       = mapped_column(String(50), nullable=False)   # e.g. 192.168.1.0/24
-    label:          Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    label:          Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_by:     Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     created_at:     Mapped[datetime]  = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -160,8 +167,8 @@ class AuthAuditEvent(Base):
     )
 
     id:             Mapped[uuid.UUID]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id:        Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("auth_portal.auth_users.id", ondelete="SET NULL"), nullable=True)
-    institution_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    user_id:        Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("auth_portal.auth_users.id", ondelete="SET NULL"), nullable=True)
+    institution_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     event_type:     Mapped[str]            = mapped_column(String(50), nullable=False)
     # Event types: login.success, login.failed, login.locked,
     #              logout, token.refresh, token.revoked,
@@ -171,9 +178,9 @@ class AuthAuditEvent(Base):
     #              session.created, session.revoked, session.expired,
     #              ip.blocked, suspicious.login
     outcome:        Mapped[str]            = mapped_column(String(20), nullable=False)   # success | failed | blocked
-    ip_address:     Mapped[Optional[str]]  = mapped_column(String(45), nullable=True)
-    user_agent:     Mapped[Optional[str]]  = mapped_column(Text, nullable=True)
-    event_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    ip_address:     Mapped[str | None]  = mapped_column(String(45), nullable=True)
+    user_agent:     Mapped[str | None]  = mapped_column(Text, nullable=True)
+    event_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at:     Mapped[datetime]       = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
 
     user: Mapped[Optional["AuthUser"]] = relationship(back_populates="audit_events")

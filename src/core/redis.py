@@ -46,7 +46,7 @@ async def check_redis_health() -> bool:
     try:
         r = await get_redis()
         return await r.ping()
-    except Exception:
+    except Exception:  # noqa: BLE001 - health probe: any failure means unhealthy
         return False
 
 

@@ -7,7 +7,8 @@
 import asyncio
 
 import resend
-from jinja2 import Environment, BaseLoader
+from jinja2 import BaseLoader, Environment
+
 from ..core.config import settings
 
 resend.api_key = settings.resend_api_key

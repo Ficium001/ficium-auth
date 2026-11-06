@@ -11,13 +11,13 @@
 # ficium-admin additionally checks its own `iam.manage` permission before calling.
 # =============================================================
 import re
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError
+from jwt import PyJWTError as JWTError
 from pydantic import BaseModel, Field, field_validator
 
 from ..core.config import settings

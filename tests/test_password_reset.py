@@ -1,5 +1,5 @@
 # Password reset: real column names, strict single use, sessions revoked.
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,7 +31,7 @@ def env():
     db = ResetDB(); u = db.add_user(must_change_password=True)
     db.sessions["s1"] = {"id": "s1", "user_id": u["id"], "is_active": True, "refresh_token_hash": "x"}
     db.tokens["t1"] = {"id": "t1", "user_id": u["id"], "token_hash": hash_token("raw-token"), "used": False,
-                       "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+                       "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat()}
     app.dependency_overrides[db_dependency] = lambda: db
     yield db, u, TestClient(app)
     app.dependency_overrides.clear()
