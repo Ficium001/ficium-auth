@@ -90,6 +90,9 @@ async def default_response_headers_middleware(request: Request, call_next):
     # Prevent MIME sniffing on all auth responses.
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
 
+    # HSTS: browsers must only ever reach the auth service over HTTPS (Railway adds none).
+    response.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+
     content_type = response.headers.get("content-type", "")
     if content_type.startswith("application/json") and "charset" not in content_type:
         response.headers["Content-Type"] = f"{content_type}; charset=utf-8"
