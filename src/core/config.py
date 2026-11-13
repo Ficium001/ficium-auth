@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     staff_roles:               str = "super_admin,ficium_staff"   # roles allowed to invite staff
     staff_email_domains:       str = "ficium.net"
     staff_invite_ttl:          int = 86400                         # set-password link, 24 h
+    # First admin of a newly provisioned institution (POST /auth/institution/invite):
+    # portal-api creates the login after the contract; this emails its set-password link.
+    institution_invite_ttl:    int = 259200                        # 72 h: bank staff, slower inboxes
 
     # ── Rate limiting ─────────────────────────────────────────
     rate_limit_login:          int = 5       # attempts per minute per IP
