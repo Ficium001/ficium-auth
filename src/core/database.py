@@ -60,6 +60,24 @@ class SupabaseDB:
         rows = r.json()
         return rows[0] if rows else None
 
+    async def get_users_by_emails(self, institution_id: str, emails: list[str]) -> list[dict]:
+        """Accounts of one institution with these emails (staff lookup). Emails are pre-validated."""
+        if not emails:
+            return []
+        quoted = ",".join(f'"{e}"' for e in emails)
+        r = await self._client.get(
+            f"{BASE}/auth_users",
+            headers=_headers(),
+            params={
+                "institution_id": f"eq.{institution_id}",
+                "email": f"in.({quoted})",
+                "select": "id,email,username,password_hash,mfa_enabled,is_active,last_login_at",
+                "limit": str(len(emails)),
+            },
+        )
+        r.raise_for_status()
+        return list(r.json())
+
     async def get_user_by_id(self, user_id: str) -> dict | None:
         r = await self._client.get(
             f"{BASE}/auth_users",
