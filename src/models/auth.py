@@ -33,7 +33,6 @@ class AuthUser(Base):
     __tablename__ = "auth_users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_auth_users_email"),
-        Index("ix_auth_users_email", "email"),
         Index("ix_auth_users_institution_id", "institution_id"),
         {"schema": "auth_portal"},
     )
@@ -66,7 +65,6 @@ class AuthSession(Base):
     __tablename__ = "auth_sessions"
     __table_args__ = (
         Index("ix_auth_sessions_user_id", "user_id"),
-        Index("ix_auth_sessions_refresh_token_hash", "refresh_token_hash"),
         Index("ix_auth_sessions_expires_at", "expires_at"),
         {"schema": "auth_portal"},
     )
@@ -108,7 +106,6 @@ class MFABackupCode(Base):
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
     __table_args__ = (
-        Index("ix_pwd_reset_token_hash", "token_hash"),
         Index("ix_pwd_reset_user_id", "user_id"),
         {"schema": "auth_portal"},
     )
@@ -127,7 +124,6 @@ class PasswordResetToken(Base):
 class EmailVerificationToken(Base):
     __tablename__ = "email_verification_tokens"
     __table_args__ = (
-        Index("ix_email_verify_token_hash", "token_hash"),
         {"schema": "auth_portal"},
     )
 
