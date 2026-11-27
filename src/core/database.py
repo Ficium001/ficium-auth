@@ -1,8 +1,12 @@
 # =============================================================
-# ficium-auth — Database via Supabase REST API
-# Direct TCP connections to Supabase fail on free plan from Railway.
-# All DB operations go through Supabase PostgREST REST API
-# using the service role key (bypasses RLS).
+# ficium-auth — Database access
+#
+# Two backends with one interface, chosen by AUTH_DB_BACKEND:
+#   rest      (legacy default) Supabase PostgREST with the service_role key.
+#             That key bypasses RLS on the WHOLE Portal DB, bank data included.
+#   postgres  (target) transaction pooler as role ficium_auth, which can touch
+#             auth_portal only; TLS verify-full. See database_pg.py and
+#             migrations/003_least_privilege_role.sql.
 # =============================================================
 
 from datetime import UTC, datetime
@@ -359,7 +363,16 @@ _db: SupabaseDB | None = None
 def get_db_client() -> SupabaseDB:
     global _db
     if _db is None:
-        _db = SupabaseDB()
+        if settings.auth_db_backend == "postgres":
+            # local import: database_pg imports this module
+            from .database_pg import PostgresDB
+            _db = PostgresDB()
+        else:
+            if settings.env == "production":
+                log.warning("auth_db_service_role",
+                            detail="ficium-auth uses the Portal DB service_role key: set "
+                                   "AUTH_DB_BACKEND=postgres (migrations/003)")
+            _db = SupabaseDB()
     return _db
 
 

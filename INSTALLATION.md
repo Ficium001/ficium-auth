@@ -193,3 +193,21 @@ Valid roles: `institution_admin`, `institution_maker`, `institution_checker`, `i
 | Login → 401 | Wrong password or user doesn't exist | Check `auth_portal.auth_users.email` and hash type (must be Argon2id) |
 | Token rejected by portal-api → "Invalid audience" | `JWT_AUDIENCE` mismatch | Must be `authenticated` on both services |
 | CORS blocked on Vercel preview | Preview origin not in regex | Set `ALLOWED_ORIGIN_REGEX` |
+
+
+## Least-privilege database access (target for production)
+
+By default (`AUTH_DB_BACKEND=rest`) ficium-auth uses the Portal DB's `service_role` key, which
+bypasses row-level security on **every** schema, bank data included. Move to the dedicated role:
+
+1. Apply `migrations/003_least_privilege_role.sql` to the Portal DB (egwobcajdlragubtkpqp).
+2. Once, by hand: `ALTER ROLE ficium_auth WITH LOGIN PASSWORD '<long random>';`
+3. Download Supabase's CA (Dashboard → Database → Settings → SSL configuration).
+4. On Railway set
+   `AUTH_DB_BACKEND=postgres`,
+   `DB_URL=postgresql://ficium_auth.egwobcajdlragubtkpqp:<pw>@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`,
+   `DB_SSL_ROOT_CERT=<the CA's PEM text>`.
+5. Redeploy, sign in once to check, then **delete `SUPABASE_SERVICE_KEY`** from ficium-auth.
+
+The postgres backend refuses to start without the CA (TLS is always verify-full). Roll back by
+setting `AUTH_DB_BACKEND=rest` again (keep the service key until step 5).

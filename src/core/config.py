@@ -23,27 +23,21 @@ class Settings(BaseSettings):
     workers: int = 2
 
     # ── Database ──────────────────────────────────────────────
-    db_url:      str = Field(..., description="PostgreSQL async DSN")
+    # AUTH_DB_BACKEND=postgres: connect as role ficium_auth (auth_portal only) through the
+    # transaction pooler, TLS verify-full with DB_SSL_ROOT_CERT (Supabase's CA, PEM or path).
+    # AUTH_DB_BACKEND=rest (legacy): PostgREST with SUPABASE_SERVICE_KEY; DB_URL is unused.
+    auth_db_backend:  str = Field(default="rest", description="rest | postgres")
+    db_url:           str = Field(default="", description="ficium_auth pooler DSN (postgres)")
+    db_ssl_root_cert: str = Field(default="", description="Supabase CA: PEM text or path")
     db_pool_min: int = 2
     db_pool_max: int = 5
 
-    @field_validator("db_url", mode="before")
+    @field_validator("auth_db_backend", mode="before")
     @classmethod
-    def ensure_ssl(cls, v: str) -> str:
-        """
-        Normalise DB URL for Railway → Supabase:
-        - Switch asyncpg driver to psycopg2 (more reliable with Supabase pooler)
-        - Ensure SSL is set
-        """
-        if not isinstance(v, str):
-            return v
-        # Switch driver
-        v = v.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
-        v = v.replace("postgresql://", "postgresql+psycopg2://")
-        # Ensure SSL
-        if "sslmode=" not in v and "ssl=" not in v:
-            sep = "&" if "?" in v else "?"
-            v = f"{v}{sep}sslmode=require"
+    def check_backend(cls, v: str) -> str:
+        v = (v or "rest").strip().lower()
+        if v not in ("rest", "postgres"):
+            raise ValueError("AUTH_DB_BACKEND must be rest or postgres")
         return v
 
     # ── Redis ─────────────────────────────────────────────────
