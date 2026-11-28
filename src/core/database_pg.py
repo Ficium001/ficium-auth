@@ -180,7 +180,7 @@ class PostgresDB(SupabaseDB):
             "SELECT jsonb_build_object('id', t.id, 'email', t.email, 'username', t.username,"
             " 'password_hash', t.password_hash, 'mfa_enabled', t.mfa_enabled,"
             " 'is_active', t.is_active, 'last_login_at', t.last_login_at)"
-            f" FROM {S}.auth_users t WHERE t.institution_id = $1::uuid AND t.email = ANY($2::text[])"
+            " FROM auth_portal.auth_users t WHERE t.institution_id = $1::uuid AND t.email = ANY($2::text[])"
             " LIMIT $3",
             institution_id, list(emails), len(emails))
 
@@ -204,7 +204,7 @@ class PostgresDB(SupabaseDB):
 
     async def get_sessions_by_user(self, user_id: str) -> list[dict]:
         return await self._rows(
-            f"SELECT to_jsonb(t) FROM {S}.auth_sessions t WHERE t.user_id = $1::uuid AND t.is_active",
+            "SELECT to_jsonb(t) FROM auth_portal.auth_sessions t WHERE t.user_id = $1::uuid AND t.is_active",
             user_id)
 
     async def update_session(self, session_id: str, data: dict) -> None:
@@ -213,7 +213,7 @@ class PostgresDB(SupabaseDB):
     async def revoke_all_user_sessions(self, user_id: str, except_id: str = "") -> None:
         pool = await self._p()
         await pool.execute(
-            f"UPDATE {S}.auth_sessions SET is_active = false, revoke_reason = 'logout_all'"
+            "UPDATE auth_portal.auth_sessions SET is_active = false, revoke_reason = 'logout_all'"
             " WHERE user_id = $1::uuid AND is_active AND ($2 = '' OR id::text <> $2)",
             user_id, except_id or "")
 
@@ -222,30 +222,30 @@ class PostgresDB(SupabaseDB):
     async def replace_backup_codes(self, user_id: str, hashes: list[str]) -> None:
         pool = await self._p()
         async with pool.acquire() as conn, conn.transaction():  # one step: never half-replaced
-            await conn.execute(f"DELETE FROM {S}.mfa_backup_codes WHERE user_id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth_portal.mfa_backup_codes WHERE user_id = $1::uuid", user_id)
             if hashes:
                 await conn.execute(
-                    f"INSERT INTO {S}.mfa_backup_codes (user_id, code_hash)"
+                    "INSERT INTO auth_portal.mfa_backup_codes (user_id, code_hash)"
                     " SELECT $1::uuid, h FROM unnest($2::text[]) AS h",
                     user_id, list(hashes))
 
     async def get_unused_backup_codes(self, user_id: str) -> list[dict]:
         return await self._rows(
             "SELECT jsonb_build_object('id', t.id, 'code_hash', t.code_hash)"
-            f" FROM {S}.mfa_backup_codes t WHERE t.user_id = $1::uuid AND t.used_at IS NULL",
+            " FROM auth_portal.mfa_backup_codes t WHERE t.user_id = $1::uuid AND t.used_at IS NULL",
             user_id)
 
     async def consume_backup_code(self, code_id: str) -> bool:
         """Mark a code used; True only for the caller that actually flipped it (no double use)."""
         pool = await self._p()
         hit = await pool.fetchval(
-            f"UPDATE {S}.mfa_backup_codes SET used_at = now()"
+            "UPDATE auth_portal.mfa_backup_codes SET used_at = now()"
             " WHERE id = $1::uuid AND used_at IS NULL RETURNING id", code_id)
         return hit is not None
 
     async def delete_backup_codes(self, user_id: str) -> None:
         pool = await self._p()
-        await pool.execute(f"DELETE FROM {S}.mfa_backup_codes WHERE user_id = $1::uuid", user_id)
+        await pool.execute("DELETE FROM auth_portal.mfa_backup_codes WHERE user_id = $1::uuid", user_id)
 
     # ── audit events ──────────────────────────────────────────
 
@@ -264,7 +264,7 @@ class PostgresDB(SupabaseDB):
     async def cancel_reset_tokens(self, user_id: str) -> None:
         pool = await self._p()
         await pool.execute(
-            f"UPDATE {S}.password_reset_tokens SET used = true, used_at = now()"
+            "UPDATE auth_portal.password_reset_tokens SET used = true, used_at = now()"
             " WHERE user_id = $1::uuid AND NOT used", user_id)
 
     async def get_password_reset_token(self, token_hash: str) -> dict | None:
@@ -274,7 +274,7 @@ class PostgresDB(SupabaseDB):
     async def mark_reset_token_used(self, token_id: str) -> bool:
         pool = await self._p()
         hit = await pool.fetchval(
-            f"UPDATE {S}.password_reset_tokens SET used = true, used_at = now()"
+            "UPDATE auth_portal.password_reset_tokens SET used = true, used_at = now()"
             " WHERE id = $1::uuid AND NOT used RETURNING id", token_id)
         return hit is not None
 
@@ -291,16 +291,16 @@ class PostgresDB(SupabaseDB):
         pool = await self._p()
         async with pool.acquire() as conn, conn.transaction():
             await conn.execute(
-                f"UPDATE {S}.email_verification_tokens SET used = true WHERE id = $1::uuid", token_id)
+                "UPDATE auth_portal.email_verification_tokens SET used = true WHERE id = $1::uuid", token_id)
             await conn.execute(
-                f"UPDATE {S}.auth_users SET email_verified = true WHERE id = $1::uuid", user_id)
+                "UPDATE auth_portal.auth_users SET email_verified = true WHERE id = $1::uuid", user_id)
 
     # ── module permissions ────────────────────────────────────
 
     async def get_member_module_permissions(self, user_id: str, institution_id: str) -> list[str]:
         user = await self._row(
             "SELECT jsonb_build_object('email', t.email, 'institution_id', t.institution_id)"
-            f" FROM {S}.auth_users t WHERE t.id = $1::uuid LIMIT 1", user_id)
+            " FROM auth_portal.auth_users t WHERE t.id = $1::uuid LIMIT 1", user_id)
         if not user:
             return []
         email = user.get("email") or ""
@@ -309,7 +309,7 @@ class PostgresDB(SupabaseDB):
             return []
         pool = await self._p()
         perms = await pool.fetchval(
-            f"SELECT {S}.get_member_module_permissions($1, $2::uuid)", email, inst)
+            "SELECT auth_portal.get_member_module_permissions($1, $2::uuid)", email, inst)
         return list(perms or [])
 
     # ── health ────────────────────────────────────────────────
@@ -317,7 +317,7 @@ class PostgresDB(SupabaseDB):
     async def health(self) -> bool:
         try:
             pool = await self._p()
-            await pool.fetchval(f"SELECT count(*) FROM (SELECT 1 FROM {S}.auth_users LIMIT 1) x")
+            await pool.fetchval("SELECT count(*) FROM (SELECT 1 FROM auth_portal.auth_users LIMIT 1) x")
             return True
         except Exception:  # noqa: BLE001 - health probe: any failure means unhealthy
             return False
